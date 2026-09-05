@@ -220,6 +220,23 @@
     color: #888;
   }
 
+  /* One company header, multiple role sub-blocks beneath it (payload's
+     `roles` array — #warnick-template) — for someone promoted more than once
+     at the same employer, so the company name isn't repeated per title. */
+  .job-group > .job-company {
+    margin-bottom: 6px;
+  }
+
+  .job-role-block {
+    margin: 0 0 10px 0;
+    padding-left: 12px;
+    border-left: 2px solid #eee;
+  }
+
+  .job-role-block:last-child {
+    margin-bottom: 0;
+  }
+
   .job ul {
     padding-left: 18px;
     margin-top: 6px;
@@ -301,6 +318,16 @@
   .edu-org {
     color: hsl(270, 70%, 45%);
     font-weight: 500;
+  }
+
+  /* Institution now renders as its own line under the degree title (see
+     templates/sections/education.html) rather than inline beside it —
+     avoids a long degree title and institution name crowding one line. */
+  .edu-org-line {
+    color: hsl(270, 70%, 45%);
+    font-weight: 500;
+    font-size: var(--font-size);
+    margin-top: 2px;
   }
 
   .edu-year {

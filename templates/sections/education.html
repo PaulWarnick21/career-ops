@@ -2,21 +2,27 @@
   education.html — section partial for Education (#2183).
 
   Field placeholders filled per entry:
-    TITLE      — degree / course title
-    ORG_BLOCK  — conditional: institution span when org is present; omitted otherwise
+    TITLE      — degree / course title (its own line, with YEAR right-aligned)
+    ORG_BLOCK  — conditional: institution name when org is present; omitted otherwise
     YEAR       — graduation / completion year (empty string when absent)
-    DESC_BLOCK — conditional: description div when description is present; omitted otherwise
+    DESC_BLOCK — conditional: description (e.g. campus/location) when
+                 present; omitted otherwise. Renders inline right after
+                 ORG_BLOCK on the SAME line ("McMaster University —
+                 Hamilton, Ontario, Canada"), not its own line — degree/title
+                 stays on its own line above (#warnick, avoids the degree
+                 text and institution name running into each other and
+                 wrapping awkwardly).
 
   Template packs: edit tag names, class names, and field order freely inside the ENTRY zone.
 -->
 <!--ENTRY-->
 <div class="edu-item">
   <div class="edu-header">
-    <div class="edu-title">{{TITLE}}{{ORG_BLOCK}}</div>
+    <div class="edu-title">{{TITLE}}</div>
     <div class="edu-year">{{YEAR}}</div>
   </div>
-  {{DESC_BLOCK}}
+  <div class="edu-org-line">{{ORG_BLOCK}}{{DESC_BLOCK}}</div>
 </div>
-<!--ORG_BLOCK--> <span class="edu-org">{{ORG}}</span><!--/ORG_BLOCK-->
-<!--DESC_BLOCK--><div class="edu-desc">{{DESC}}</div><!--/DESC_BLOCK-->
+<!--ORG_BLOCK-->{{ORG}}<!--/ORG_BLOCK-->
+<!--DESC_BLOCK--><span class="edu-desc"> — {{DESC}}</span><!--/DESC_BLOCK-->
 <!--/ENTRY-->

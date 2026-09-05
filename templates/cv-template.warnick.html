@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{NAME}} — CV</title>
+<style>
+  /* "warnick" template — matches the layout/typography of Paul's original
+     resume: centered header, blue section headings with a full-width
+     underline rule, italic company names, bold role titles with right-aligned
+     italic blue dates. See templates/README (or ask the agent) for the two
+     known deviations from the original PDF and why: PDF generation runs with
+     JavaScript disabled and no network access (ATS-safety/reproducibility by
+     design), so (1) the name renders in one weight rather than a thin/bold
+     two-tone split, and (2) external web fonts can't load — this uses the
+     same ATS-safe system-font stack as the default template. */
+  /* {{CUSTOM_FONTS}} — @font-face rules injected from payload.custom_fonts
+     (base64-embedded local font files; see build-cv-html.mjs's
+     buildCustomFontFaces). Empty string, and this template falls back to the
+     system stack below exactly like the default template does. */
+  {{CUSTOM_FONTS}}
+
+  :root {
+    --accent-color: hsl(205 58% 40%);
+    --font-family: "Roboto", "Liberation Sans", 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
+    /* ~30% larger than the default template's 11px, and margins pulled in
+       accordingly (see @page below) — matches Paul's original resume more
+       closely than the smaller ATS-default sizing. */
+    --font-size: 14.5px;
+    --page-margin: 0.35in;
+  }
+  @page { margin: var(--page-margin); }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    line-height: 1.5;
+    color: #3a3a3a;
+    background: #ffffff;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+  }
+
+  .page {
+    width: 100%;
+    max-width: {{PAGE_WIDTH}};
+    margin: 0 auto;
+    padding: 2px 0;
+  }
+
+  /* === HEADER (centered) === */
+  .header {
+    text-align: center;
+    margin-bottom: 6px;
+  }
+
+  .header h1 {
+    font-family: var(--font-family);
+    font-size: 42px;
+    color: #3a3a3a;
+    letter-spacing: 0.01em;
+    margin-bottom: 8px;
+    line-height: 1.1;
+  }
+
+  /* Two-tone name (thin first name / bold last name), matching the original
+     resume. Requires the embedded Roboto Thin (100) and Bold (700) weights —
+     see payload.custom_fonts. Falls back to whatever weight 100/700 resolve
+     to in the system stack if a custom font isn't embedded (usually just
+     regular vs. bold, since few system fonts ship a true hairline weight). */
+  .name-first {
+    font-weight: 100;
+  }
+  .name-last {
+    font-weight: 700;
+  }
+
+  /* No accent gradient bar in this template — the original resume's header
+     has no rule under the name, just centered contact info below it. */
+  .header-gradient { display: none; }
+
+  .contact-row {
+    justify-content: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-family: var(--font-family);
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--accent-color);
+  }
+
+  .contact-row a {
+    color: var(--accent-color);
+    text-decoration: none;
+  }
+
+  /* Email set apart from the other contact links: larger, and black to
+     match the body text instead of the accent blue. (`.contact-row a` is
+     one class + one element selector, so this needs the extra `a` to
+     out-specify it rather than relying on source order.) */
+  .contact-row a.contact-email {
+    font-size: 15px;
+    color: #3a3a3a;
+  }
+
+  .contact-row .separator {
+    color: #c8d3dc;
+  }
+
+  .cv-photo {
+    float: right;
+    width: 80px;
+    height: 100px;
+    object-fit: cover;
+    margin: 0 0 8px 14px;
+    border-radius: 3px;
+    border: 1px solid #e2e2e2;
+  }
+  .cv-photo--rounded { border-radius: 8px; }
+  .cv-photo--circle { border-radius: 50%; aspect-ratio: 1; height: 80px; }
+  .cv-photo--square { border-radius: 0; aspect-ratio: 1; height: 80px; }
+
+  /* === SECTIONS — blue heading, full-width underline rule === */
+  .section {
+    margin-bottom: 4px;
+  }
+
+  .section-title {
+    font-family: var(--font-family);
+    font-size: 17.5px;
+    font-weight: 700;
+    color: var(--accent-color);
+    border-bottom: 1.5px solid var(--accent-color);
+    padding-bottom: 2px;
+    margin-bottom: 5px;
+    line-height: 1.2;
+  }
+
+  /* Justified body/paragraph text only — never headings or titles (see each
+     rule below and the selectors deliberately left unjustified: .header h1,
+     .section-title, .job-company, .job-role, .edu-title, .edu-org-line,
+     .project-title, .skill-category). */
+  .summary-text {
+    font-size: var(--font-size);
+    line-height: 1.4;
+    color: #333;
+    text-align: justify;
+    text-justify: inter-word;
+    margin-left: 14px;
+  }
+
+  .summary-text strong {
+    font-weight: 700;
+    color: #3a3a3a;
+  }
+
+  a { white-space: nowrap; }
+
+  .competencies-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .competency-tag {
+    font-family: var(--font-family);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent-color);
+    background: hsl(205, 45%, 95%);
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid hsl(205, 45%, 88%);
+  }
+
+  /* === WORK EXPERIENCE — italic company, bold role, italic blue dates === */
+  .job {
+    margin-bottom: 3px;
+  }
+
+  .job-company {
+    display: block;
+    font-family: var(--font-family);
+    font-size: 16px;
+    font-weight: 700;
+    font-style: italic;
+    color: #808080;
+    margin-bottom: 4px;
+  }
+
+  /* Was 8px here vs. 4px on the flat-entry path below (job-header's own
+     margin-bottom) — the mismatch a grouped company (e.g. "Ford Motor
+     Company", 3 roles) and a flat one (e.g. "BlackBerry", 1 role) made
+     visibly obvious side by side. Both paths now use the same 4px gap
+     between the company name and the first role title under it. */
+  .job-group > .job-company {
+    margin-bottom: 4px;
+  }
+
+  /* Indented relative to the company name above it, so each role (and its
+     bullets) reads as visually subordinate to the employer — applies to
+     both a grouped company's role sub-blocks and a flat (single-role)
+     entry's role/bullets, see the flat-path rule further down. */
+  .job-role-block {
+    margin: 0 0 3px 14px;
+  }
+  .job-role-block:last-child { margin-bottom: 0; }
+
+  .job-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
+  /* Flat (single-role) entries still need a company/period header row —
+     the grouped `.job-group` path never renders this class combination. */
+  .job:not(.job-group) .job-header .job-company {
+    display: inline;
+    margin-bottom: 0;
+  }
+
+  /* Same indent as .job-role-block above, applied directly since a flat
+     entry has no wrapping role-block to carry it — role title, location,
+     and bullets all sit one level in from the (unindented) company line. */
+  .job:not(.job-group) .job-role,
+  .job:not(.job-group) .job-location,
+  .job:not(.job-group) > ul {
+    margin-left: 14px;
+  }
+
+  .job-period {
+    font-size: 13.5px;
+    font-style: italic;
+    color: var(--accent-color);
+    white-space: nowrap;
+    text-align: justify;
+  }
+
+  .job-role {
+    font-size: var(--font-size);
+    font-weight: 700;
+    color: #3a3a3a;
+  }
+
+  .job-location {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 2px;
+  }
+
+  .job ul {
+    padding-left: 18px;
+    margin-top: 4px;
+  }
+
+  .job li {
+    font-size: 13.5px;
+    line-height: 1.3;
+    color: #333;
+    margin-bottom: 1px;
+    text-align: justify;
+    text-justify: inter-word;
+  }
+
+  .job li strong { font-weight: 700; }
+
+  /* === PROJECTS === */
+  .project { margin-bottom: 12px; }
+
+  .project-title {
+    font-family: var(--font-family);
+    font-size: 15px;
+    font-weight: 700;
+    font-style: italic;
+    color: #3a3a3a;
+  }
+
+  .project-title a { color: inherit; text-decoration: none; }
+  .project-title a:hover { text-decoration: underline; }
+
+  .project-badge {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--accent-color);
+    background: hsl(205, 45%, 95%);
+    padding: 1px 6px;
+    border-radius: 2px;
+    margin-left: 6px;
+  }
+
+  .project-desc {
+    font-size: 13.5px;
+    color: #444;
+    margin-top: 3px;
+    line-height: 1.55;
+    text-align: justify;
+    text-justify: inter-word;
+  }
+
+  .project-tech {
+    font-size: 12.5px;
+    color: #888;
+    margin-top: 3px;
+  }
+
+  /* === EDUCATION === */
+  .edu-item { margin-bottom: 8px; }
+
+  .edu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .edu-title {
+    font-weight: 700;
+    font-size: var(--font-size);
+    color: #3a3a3a;
+  }
+
+  .edu-org {
+    color: #3a3a3a;
+    font-weight: 700;
+    font-style: italic;
+  }
+
+  /* Institution on its own line beneath the degree (see
+     templates/sections/education.html) — degree title stays unjustified
+     like every other heading. Grey to match .job-company's de-emphasized
+     treatment of employer/institution names. */
+  .edu-org-line {
+    font-size: var(--font-size);
+    font-weight: 500;
+    font-style: italic;
+    color: #808080;
+    margin-top: 3px;
+  }
+
+  .edu-year {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--accent-color);
+    white-space: nowrap;
+    text-align: justify;
+  }
+
+  /* Inline now (see templates/sections/education.html — DESC_BLOCK renders
+     right after ORG_BLOCK on the same line, e.g. "McMaster University —
+     Hamilton, Ontario, Canada"), not its own line below. */
+  .edu-desc {
+    font-size: var(--font-size);
+    font-style: italic;
+    font-weight: 400;
+    color: #808080;
+  }
+
+  /* === CERTIFICATIONS / AWARDS === */
+  .cert-table, .award-table { display: table; width: 100%; }
+  .cert-item, .award-item { display: table-row; }
+  .cert-item > *, .award-item > * {
+    display: table-cell;
+    vertical-align: baseline;
+    padding-bottom: 6px;
+  }
+  .cert-title, .award-title { font-size: 13.5px; font-weight: 500; color: #333; text-align: justify; text-justify: inter-word; }
+  .cert-org, .award-org { color: #3a3a3a; font-style: italic; white-space: nowrap; }
+  .cert-year, .award-year {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--accent-color);
+    white-space: nowrap;
+    text-align: right;
+    width: 52px;
+  }
+
+  /* === INTERESTS === */
+  .interests-line { font-size: 13.5px; color: #444; text-align: justify; text-justify: inter-word; }
+
+  /* === SKILLS === */
+  /* One bullet per skill category/entry, matching the original resume's
+     bulleted list — see the payload shape in modes/_custom.md (a separate
+     { items: [...] } entry per bullet line, not one category with several
+     items joined by commas onto a single line). */
+  .skills-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 18px;
+  }
+  .skill-item {
+    font-size: 13.5px;
+    color: #444;
+    text-align: justify;
+    text-justify: inter-word;
+    list-style: disc;
+    display: list-item;
+  }
+  .skill-category { font-weight: 700; color: #3a3a3a; font-size: 13.5px; }
+
+  /* === PRINT === */
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { padding: 0 0.18in 0 0; }
+  }
+
+  /* === PAGE BREAK CONTROL === */
+  .header, .edu-item, .cert-item, .competency-tag, .skill-item, .job-role-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .section-title, .job-company, .job-role, .job-location, .project-title {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .project-tech { break-before: avoid; page-break-before: avoid; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  {{PHOTO}}
+  <!-- HEADER -->
+  <div class="header">
+    <h1><span class="name-first">{{NAME_FIRST}}</span> <span class="name-last">{{NAME_LAST}}</span></h1>
+    <div class="contact-row">
+      <a href="tel:{{PHONE}}">{{PHONE}}</a>
+      <span class="separator">|</span>
+      <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>
+      <span class="separator">|</span>
+      <a href="{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a>
+      <span class="separator">|</span>
+      <a href="{{PORTFOLIO_URL}}">{{PORTFOLIO_DISPLAY}}</a>
+      <span class="separator">|</span>
+      <span>{{LOCATION}}</span>
+    </div>
+  </div>
+
+  <!-- PROFESSIONAL SUMMARY (rendered as "Who Am I?" per the original resume) -->
+  <div class="section">
+    <div class="section-title">{{SECTION_SUMMARY}}</div>
+    <div class="summary-text">{{SUMMARY_TEXT}}</div>
+  </div>
+
+  <!-- CORE COMPETENCIES -->
+  <div class="section">
+    <div class="section-title">{{SECTION_COMPETENCIES}}</div>
+    <div class="competencies-grid">
+      {{COMPETENCIES}}
+    </div>
+  </div>
+
+  <!-- WORK EXPERIENCE -->
+  <div class="section">
+    <div class="section-title">{{SECTION_EXPERIENCE}}</div>
+    {{EXPERIENCE}}
+  </div>
+
+  <!-- PROJECTS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_PROJECTS}}</div>
+    {{PROJECTS}}
+  </div>
+
+  <!-- EDUCATION -->
+  <div class="section">
+    <div class="section-title">{{SECTION_EDUCATION}}</div>
+    {{EDUCATION}}
+  </div>
+
+  <!-- CERTIFICATIONS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_CERTIFICATIONS}}</div>
+    <div class="cert-table">{{CERTIFICATIONS}}</div>
+  </div>
+
+  <!-- AWARDS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_AWARDS}}</div>
+    <div class="award-table">{{AWARDS}}</div>
+  </div>
+
+  <!-- INTERESTS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_INTERESTS}}</div>
+    <div class="interests-line">{{INTERESTS}}</div>
+  </div>
+
+  <!-- SKILLS -->
+  <div class="section">
+    <div class="section-title">{{SECTION_SKILLS}}</div>
+    {{SKILLS}}
+  </div>
+  <!-- END -->
+
+</div>
+</body>
+</html>

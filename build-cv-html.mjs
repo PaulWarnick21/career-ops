@@ -32,7 +32,7 @@ import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 import { stripEmptySections } from './cv-sections-core.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
-import { hasRequiredFields, validatePayload } from './lib/cv-payload-schema.mjs';
+import { hasRequiredFields, validatePayload, hasText } from './lib/cv-payload-schema.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_ROOT = getCareerOpsRoot();
@@ -346,17 +346,57 @@ function buildCompetencies(entries, partial) {
     .join('\n      ');
 }
 
-function buildExperience(entries, partial) {
-  if (!Array.isArray(entries) || entries.length === 0) return '';
-  if (!partial) {
-    return entries.filter(e => hasRequiredFields(e, 'experience', 'html')).map(e => {
-      const bullets = Array.isArray(e.bullets)
-        ? e.bullets.filter(Boolean).map(b => `        <li>${escapeHtml(b)}</li>`).join('\n')
-        : '';
-      const location = e.location
-        ? `\n    <div class="job-location">${escapeHtml(e.location)}</div>`
-        : '';
-      return `<div class="job">
+// A `roles` entry is renderable when it's a non-empty array containing at
+// least one sub-entry with real role text — mirrors hasRenderableItems()'s
+// "every element must actually carry something" discipline, just one level
+// up: an array of blanks renders nothing, same as an absent key.
+function hasRenderableRoles(roles) {
+  return Array.isArray(roles) && roles.some(r => r && typeof r === 'object' && hasText(r.role));
+}
+
+function buildRoleBlock(r) {
+  const bullets = Array.isArray(r.bullets)
+    ? r.bullets.filter(Boolean).map(b => `        <li>${escapeHtml(b)}</li>`).join('\n')
+    : '';
+  const location = r.location
+    ? `\n      <div class="job-location">${escapeHtml(r.location)}</div>`
+    : '';
+  return `    <div class="job-role-block">
+      <div class="job-header">
+        <span class="job-role">${escapeHtml(r.role)}</span>
+        <span class="job-period">${escapeHtml(r.dates || r.period || '')}</span>
+      </div>${location}
+      <ul>
+${bullets}
+      </ul>
+    </div>`;
+}
+
+// Builds one grouped company block (JS-authored markup — the {{ENTRY}}
+// partial format has no loop construct to express "N role sub-entries under
+// one company", so a grouped entry always renders this way, whether or not a
+// custom experience.html partial is loaded. A flat (non-grouped) entry still
+// goes through the partial when one is present, so existing per-template
+// markup customizations for the common case are untouched.
+function buildGroupedJob(e) {
+  const roleBlocks = e.roles.filter(r => r && hasText(r.role)).map(buildRoleBlock).join('\n');
+  const location = e.location
+    ? `\n    <div class="job-location">${escapeHtml(e.location)}</div>`
+    : '';
+  return `<div class="job job-group">
+    <div class="job-company">${escapeHtml(e.company)}</div>${location}
+${roleBlocks}
+  </div>`;
+}
+
+function buildFlatJob(e) {
+  const bullets = Array.isArray(e.bullets)
+    ? e.bullets.filter(Boolean).map(b => `        <li>${escapeHtml(b)}</li>`).join('\n')
+    : '';
+  const location = e.location
+    ? `\n    <div class="job-location">${escapeHtml(e.location)}</div>`
+    : '';
+  return `<div class="job">
     <div class="job-header">
       <span class="job-company">${escapeHtml(e.company)}</span>
       <span class="job-period">${escapeHtml(e.dates || e.period || '')}</span>
@@ -366,11 +406,25 @@ function buildExperience(entries, partial) {
 ${bullets}
     </ul>
   </div>`;
-    }).join('\n  ');
+}
+
+function buildExperience(entries, partial) {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  // Renders when there's a company AND (a flat role OR a renderable `roles`
+  // array) — the cross-field check the schema's per-field `rules` can't
+  // express, so it lives here instead (see the schema comment).
+  const renderable = entries.filter(e => e && typeof e === 'object' && hasText(e.company) && (hasText(e.role) || hasRenderableRoles(e.roles)));
+
+  if (!partial) {
+    return renderable.map(e => (hasRenderableRoles(e.roles) ? buildGroupedJob(e) : buildFlatJob(e))).join('\n  ');
   }
 
+  // Partial-based rendering (custom `sections/experience.html`): a grouped
+  // entry still bypasses the partial (see buildGroupedJob's comment); a flat
+  // entry uses the partial's own markup, preserving template customizations.
   const { entryTemplate, blocks } = partial;
-  return entries.filter(e => hasRequiredFields(e, 'experience', 'html')).map(e => {
+  return renderable.map(e => {
+    if (hasRenderableRoles(e.roles)) return buildGroupedJob(e);
     const bullets = Array.isArray(e.bullets)
       ? e.bullets.filter(Boolean).map(b => `<li>${escapeHtml(b)}</li>`).join('\n    ')
       : '';
@@ -588,30 +642,106 @@ function buildSkills(categories, partial) {
 function buildContactRow(candidate) {
   const c = candidate || {};
   const items = [];
+  // Each item carries a `contact-{type}` class so a template can style one
+  // field independently (e.g. a larger, differently-colored email) without
+  // that choice affecting any other contact field or any other template —
+  // the default template's CSS doesn't reference these classes, so this is
+  // a no-op there.
   if (c.phone) {
     const tel = sanitizeUrl('tel:' + String(c.phone).replace(/\s+/g, ''));
-    items.push(`<a href="${tel}">${escapeHtml(c.phone)}</a>`);
+    items.push(`<a class="contact-phone" href="${tel}">${escapeHtml(c.phone)}</a>`);
   }
   if (c.email) {
-    items.push(`<a href="${sanitizeUrl('mailto:' + c.email)}">${escapeHtml(c.email)}</a>`);
+    items.push(`<a class="contact-email" href="${sanitizeUrl('mailto:' + c.email)}">${escapeHtml(c.email)}</a>`);
   }
   if (c.linkedin && c.linkedin.url) {
-    items.push(`<a href="${sanitizeUrl(c.linkedin.url)}">${escapeHtml(c.linkedin.display || c.linkedin.url)}</a>`);
+    items.push(`<a class="contact-linkedin" href="${sanitizeUrl(c.linkedin.url)}">${escapeHtml(c.linkedin.display || c.linkedin.url)}</a>`);
   }
   if (c.github && c.github.url) {
     const githubHref = sanitizeUrl(c.github.url);
     if (githubHref) {
-      items.push(`<a href="${githubHref}">${escapeHtml(c.github.display || c.github.url)}</a>`);
+      items.push(`<a class="contact-github" href="${githubHref}">${escapeHtml(c.github.display || c.github.url)}</a>`);
     }
   }
   if (c.portfolio && c.portfolio.url) {
-    items.push(`<a href="${sanitizeUrl(c.portfolio.url)}">${escapeHtml(c.portfolio.display || c.portfolio.url)}</a>`);
+    items.push(`<a class="contact-portfolio" href="${sanitizeUrl(c.portfolio.url)}">${escapeHtml(c.portfolio.display || c.portfolio.url)}</a>`);
   }
   if (c.location) {
-    items.push(`<span>${escapeHtml(c.location)}</span>`);
+    items.push(`<span class="contact-location">${escapeHtml(c.location)}</span>`);
   }
   const sep = '\n      <span class="separator">|</span>\n      ';
   return `<div class="contact-row">\n      ${items.join(sep)}\n    </div>`;
+}
+
+// Splits a full name into a first/last pair for templates that style them
+// differently (e.g. a thin-weight first name / bold-weight last name, the
+// "warnick" template's two-tone header). Explicit candidate.first_name /
+// candidate.last_name win when either is set; otherwise falls back to
+// splitting candidate.name on its first space. Every other template ignores
+// NAME_FIRST/NAME_LAST entirely and keeps using the full {{NAME}} string, so
+// this has no effect outside a template that opts in.
+function splitName(candidate) {
+  if (candidate && (hasText(candidate.first_name) || hasText(candidate.last_name))) {
+    return { first: candidate.first_name || '', last: candidate.last_name || '' };
+  }
+  const full = ((candidate && candidate.name) || '').trim();
+  if (!full) return { first: '', last: '' };
+  const idx = full.indexOf(' ');
+  return idx === -1 ? { first: full, last: '' } : { first: full.slice(0, idx), last: full.slice(idx + 1) };
+}
+
+const FONT_MIME_BY_EXT = new Map([
+  ['.ttf', 'font/ttf'],
+  ['.otf', 'font/otf'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+]);
+const FONT_FORMAT_BY_EXT = new Map([
+  ['.ttf', 'truetype'],
+  ['.otf', 'opentype'],
+  ['.woff', 'woff'],
+  ['.woff2', 'woff2'],
+]);
+
+// Embeds local font files as base64 data: URIs directly in the generated
+// HTML (and therefore the PDF) — so a personal font collection never has to
+// live inside the career-ops checkout, and PDF generation's no-network,
+// file:/data:-only sandbox (see generate-pdf.mjs's route filter) still works
+// unmodified. `fonts` is payload.custom_fonts: an array of
+// { family, weight?, style?, path }. A font that can't be read or has an
+// unsupported extension is skipped with a warning rather than failing the
+// whole render — a missing/renamed font file should degrade to the
+// template's fallback font stack, not break PDF generation.
+function buildCustomFontFaces(fonts) {
+  if (!Array.isArray(fonts) || fonts.length === 0) return '';
+  const rules = [];
+  for (const f of fonts) {
+    if (!f || typeof f !== 'object' || !hasText(f.family) || !hasText(f.path)) continue;
+    const ext = extname(f.path).toLowerCase();
+    const mime = FONT_MIME_BY_EXT.get(ext);
+    const format = FONT_FORMAT_BY_EXT.get(ext);
+    if (!mime || !format) {
+      console.error(`custom_fonts: unsupported font format "${ext}" for ${f.path} — skipping`);
+      continue;
+    }
+    let bytes;
+    try {
+      bytes = readFileSync(resolve(f.path));
+    } catch (err) {
+      console.error(`custom_fonts: could not read ${f.path} (${err.code || err.message}) — skipping`);
+      continue;
+    }
+    const weight = Number.isFinite(Number(f.weight)) ? Number(f.weight) : 400;
+    const style = f.style === 'italic' ? 'italic' : 'normal';
+    rules.push(`@font-face {
+  font-family: "${f.family.replace(/["\\]/g, '')}";
+  font-weight: ${weight};
+  font-style: ${style};
+  font-display: swap;
+  src: url(data:${mime};base64,${bytes.toString('base64')}) format("${format}");
+}`);
+  }
+  return rules.join('\n');
 }
 
 function buildPhoto(candidate, name) {
@@ -630,6 +760,9 @@ function renderReport(payload, partials) {
     LANG: escapeHtml(payload.lang || 'en'),
     PAGE_WIDTH: pageWidth,
     NAME: escapeHtml(candidate.name || ''),
+    NAME_FIRST: escapeHtml(splitName(candidate).first),
+    NAME_LAST: escapeHtml(splitName(candidate).last),
+    CUSTOM_FONTS: buildCustomFontFaces(payload.custom_fonts),
     SECTION_SUMMARY: escapeHtml(sectionTitles.summary),
     SUMMARY_TEXT: escapeHtml(payload.summary || ''),
     SECTION_COMPETENCIES: escapeHtml(sectionTitles.competencies),
