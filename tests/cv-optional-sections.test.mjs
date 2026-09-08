@@ -71,6 +71,7 @@ function check(label, actual, expected) {
 // (now-strippable) SKILLS marker or its content.
 const TEMPLATES = [
   { file: 'templates/cv-template.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: true },
+  { file: 'templates/cv-template.warnick.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: true },
   { file: 'templates/resume-template.html', format: 'html', after: '<!-- END -->', hasCertifications: false, hasCompetencies: true, hasInterests: false },
   { file: 'templates/cv-template.zh-minimal.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: false },
   { file: 'templates/cv-template.compact.html', format: 'html', after: '<!-- END -->', hasCertifications: true, hasCompetencies: true, hasInterests: false },
