@@ -52,6 +52,10 @@ function sanitizeJob(job) {
   if (typeof job.company === 'string') out.company = job.company.trim();
   if (typeof job.location === 'string') out.location = job.location.trim();
   if (job.salary !== undefined) out.salary = job.salary;
+  // Labeled free-text ranking signal — formatPipelineOffer serializes it into
+  // the row's `note:` segment (e.g. an ingest plugin flagging a title-only lead
+  // whose JD it could not fetch). Local-fork addition alongside gmail-alerts.
+  if (typeof job.note === 'string' && job.note.trim()) out.note = job.note.trim();
   return out;
 }
 

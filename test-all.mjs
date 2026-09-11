@@ -359,6 +359,10 @@ const scripts = [
   { name: 'followup-seed-tests.mjs', expectExit: 0 },
   { name: 'paste-reply-tests.mjs', expectExit: 0 },
   { name: 'set-status-tests.mjs', expectExit: 0 },
+  // plugins.local/*/*-tests.mjs entries are appended below, AFTER this literal
+  // — see "local plugin test discovery". Hardcoding a path under plugins.local/
+  // here would break `node test-all.mjs` for anyone without that gitignored,
+  // personal directory (a fresh clone, a collaborator, GitHub Actions CI).
   // The one script in this list that genuinely needs longer than the shared
   // budget. It spawns competing writer processes for 27 contention cases, and
   // that cost is the behaviour under test rather than slack to be trimmed.
@@ -394,6 +398,29 @@ const scripts = [
   { name: 'seed-fixture.mjs --self-test', expectExit: 0 },
   { name: 'archive-posting.mjs --help', expectExit: 0 },
 ];
+
+// ── local plugin test discovery ─────────────────────────────────────────────
+// plugins.local/ is the user's own, gitignored plugin directory — it does not
+// exist in a fresh clone, for a collaborator, or in GitHub Actions CI. A path
+// under it can therefore never be a literal in the `scripts` array above (that
+// would fail this exact suite for everyone who doesn't have that personal
+// plugin). Instead, discover any `plugins.local/<id>/*-tests.mjs` file AT RUN
+// TIME and run it the same way as every other script-test — present, it's
+// covered automatically; absent, this block adds nothing and the suite stays
+// byte-identical to a plain clone, mirroring plugins/_engine.mjs's own
+// opt-in-only posture toward that directory.
+const PLUGINS_LOCAL_DIR = join(ROOT, 'plugins.local');
+if (existsSync(PLUGINS_LOCAL_DIR)) {
+  for (const pluginId of readdirSync(PLUGINS_LOCAL_DIR, { withFileTypes: true })) {
+    if (!pluginId.isDirectory() && !pluginId.isSymbolicLink()) continue;
+    const pluginDir = join(PLUGINS_LOCAL_DIR, pluginId.name);
+    let files;
+    try { files = readdirSync(pluginDir); } catch { continue; } // unreadable / broken symlink
+    for (const file of files.filter((f) => f.endsWith('-tests.mjs')).sort()) {
+      scripts.push({ name: `plugins.local/${pluginId.name}/${file}`, expectExit: 0 });
+    }
+  }
+}
 
 const scriptTmp = mkdtempSync(join(ROOT, '.tmp-script-test-'));
 try {
