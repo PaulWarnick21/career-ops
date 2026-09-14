@@ -72,6 +72,12 @@ Save hooks in `.claude/settings.json` (Claude Code). OpenCode does not support h
 ## States (templates/states.yml)
 
 The canonical states rarely need changing. If you add new states, update:
-1. `templates/states.yml`
-2. `normalize-statuses.mjs` (alias mappings)
-3. `modes/_shared.md` (any references)
+1. `templates/states.yml` — the source of truth; everything below follows from it
+2. `merge-tracker.mjs` — `CANONICAL_STATES` (hardcoded labels; a status not in this list is silently downgraded to `Evaluated` on merge)
+3. `verify-pipeline.mjs` — `CANONICAL_STATUSES` (hardcoded ids; otherwise the health check reports a false "non-canonical status")
+4. `stats.mjs` — `CANONICAL_STATUSES` list, and `ID_LABEL_OVERRIDES` for any id that isn't a single word (e.g. `ready_to_apply` needs an explicit "Ready to Apply" entry — naive title-casing gets it wrong)
+5. `analyze-patterns.mjs` — `classifyOutcome()`, if the new state is a real outcome (positive/negative/self_filtered/discarded) rather than "still pending"
+6. `dedup-tracker.mjs` — `STATUS_RANK` (an unlisted state defaults to rank 0, same as `skip`/`discarded` — fine for a terminal state, wrong for anything active)
+7. `modes/_shared.md` (any references)
+
+(`set-status.mjs`, `tracker-utils.mjs`, `tracker-sync-check.mjs`, `normalize-statuses.mjs`, and `followup-cadence.mjs` all read `templates/states.yml` dynamically — no change needed there. If this project's `web/` dashboard is in use, its several hardcoded state lists — `web/src/lib/format.ts`, `web/src/app/actions/registry.ts`, `web/src/components/pipeline-view.tsx`, `web/src/app/analytics/page.tsx`, `web/src/app/api/assistant/route.ts`, and `web/src/lib/home/awaiting.mjs`'s "awaiting decision" filter — need the same treatment; `dashboard/internal/data/career.go`, the Go TUI, does too.)

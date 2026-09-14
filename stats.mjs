@@ -38,7 +38,21 @@ const STATUS_LOG_FILE = join(DATA_ROOT, 'data', 'status-log.tsv');
 const PORTALS_FILE = join(DATA_ROOT, 'portals.yml');
 const PORTAL_HEALTH_FILE = join(DATA_ROOT, 'data', 'portal-health.tsv');
 
-const CANONICAL_STATUSES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Hired', 'Rejected', 'Discarded', 'SKIP'];
+const CANONICAL_STATUSES = [
+  'Evaluated', 'Interested', 'Ready to Apply', 'Applied', 'Responded', 'Interview',
+  'Offer', 'Hired', 'Rejected', 'Discarded', 'Application Skipped', 'SKIP',
+];
+
+// states.yml ids are lowercase snake_case; a naive "capitalize the first
+// letter" title-cases `ready_to_apply` to "Ready_to_apply" (not "Ready to
+// Apply"), which then can't match CANONICAL_STATUSES and silently lands in
+// "Unknown" — the same reason `skip` already needed special-casing below.
+// Any multi-word (or otherwise non-trivially-cased) id needs an entry here.
+const ID_LABEL_OVERRIDES = {
+  skip: 'SKIP',
+  ready_to_apply: 'Ready to Apply',
+  application_skipped: 'Application Skipped',
+};
 
 // In-flight applications. Deliberately NARROWER than the dashboard's
 // ActiveApps (which also counts Evaluated): an evaluated-but-never-sent row is
@@ -57,7 +71,7 @@ const pct = (part, total) => (total > 0 ? round1((part / total) * 100) : 0);
 /** Canonical display form ("aplicado" → "Applied", "skip" → "SKIP"); unknown → "Unknown" (counted, never dropped). */
 function canonicalStatus(raw) {
   const norm = normalizeStatus(String(raw ?? ''));
-  if (norm === 'skip') return 'SKIP';
+  if (ID_LABEL_OVERRIDES[norm]) return ID_LABEL_OVERRIDES[norm];
   const cased = norm.charAt(0).toUpperCase() + norm.slice(1);
   return CANONICAL_STATUSES.includes(cased) ? cased : 'Unknown';
 }

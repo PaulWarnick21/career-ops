@@ -17,8 +17,26 @@ states:
   - id: evaluated
     label: Evaluated
     aliases: [evaluada, condicional, hold, evaluar, verificar, değerlendirildi, degerlendirildi]
-    description: Offer evaluated with report, pending decision
+    description: Offer evaluated with report, pending decision (legacy — see interested)
     dashboard_group: evaluated
+
+  # interested / ready_to_apply / application_skipped added 2026-09-13 (the
+  # "Sorting Desk" lifecycle redesign). `interested` is the new default landing
+  # state for a completed evaluation going forward — it occupies the same
+  # lifecycle stage `evaluated` always has (report written, decision pending),
+  # right after it in this list on purpose. Existing rows already marked
+  # `evaluated` are left alone; nothing migrates them automatically.
+  - id: interested
+    label: Interested
+    aliases: []
+    description: Full evaluation (manual or automatic) confirmed this clears the bar; decision pending
+    dashboard_group: interested
+
+  - id: ready_to_apply
+    label: Ready to Apply
+    aliases: []
+    description: Decided to apply, from Interested; application not sent yet
+    dashboard_group: ready_to_apply
 
   - id: applied
     label: Applied
@@ -64,6 +82,19 @@ states:
     aliases: [no_aplicar, no aplicar, skip, monitor, geo blocker, geo_blocker, "uygun değil", uygun_değil, "uygun degil", uygun_degil]
     description: Doesn't fit, don't apply
     dashboard_group: skip
+    terminal: true
+
+  # Distinct from `discarded` (which also covers "offer closed") and from
+  # `skip` (a pre-evaluation "doesn't fit"): this is specifically "reviewed —
+  # from Unreviewed directly, or after a full evaluation — and decided not to
+  # apply." Reachable from #1 Unreviewed, #2 Interested, or #3 Ready to Apply
+  # (changed mind). Terminal — nothing routes out of it automatically; moving
+  # a job back out is a manual, explicit request, never an automated one.
+  - id: application_skipped
+    label: Application Skipped
+    aliases: []
+    description: Reviewed and decided not to apply (from Unreviewed or after evaluation)
+    dashboard_group: application_skipped
     terminal: true
 
   - id: hired

@@ -481,7 +481,9 @@ One TSV file per evaluation at `batch/tracker-additions/{num}-{company-slug}.tsv
 
 | State | When to use |
 |-------|-------------|
-| `Evaluated` | Report completed, pending decision |
+| `Evaluated` | Report completed, pending decision (legacy — see `Interested`) |
+| `Interested` | Full evaluation (manual or automatic) confirmed this clears the bar; decision pending. New default landing state as of 2026-09-13 — existing `Evaluated` rows are left as-is, never migrated automatically |
+| `Ready to Apply` | Decided to apply, from `Interested`; application not sent yet |
 | `Applied` | Application sent |
 | `Responded` | Company responded |
 | `Interview` | In interview process |
@@ -489,6 +491,7 @@ One TSV file per evaluation at `batch/tracker-additions/{num}-{company-slug}.tsv
 | `Hired` | Offer accepted — landed the job (terminal success) |
 | `Rejected` | Rejected by company |
 | `Discarded` | Discarded by candidate or offer closed |
+| `Application Skipped` | Reviewed and decided not to apply — from `Unreviewed` directly, or after a full evaluation. Distinct from `Discarded` (which also covers "offer closed") and `SKIP` (a pre-evaluation "doesn't fit"). Terminal — nothing routes out of it automatically |
 | `SKIP` | Doesn't fit, don't apply |
 
 **RULES:**

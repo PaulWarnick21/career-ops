@@ -118,7 +118,12 @@ export function classifyOutcome(status) {
   // canonical funnel counts (stats.mjs) nor an employer decision.
   if (s === 'discarded') return 'discarded';
   if (s === 'skip') return 'self_filtered';
-  return 'pending'; // evaluated
+  // Reviewed and decided not to apply (from Unreviewed or after a full
+  // evaluation) — a terminal candidate-side decision, the same bucket as
+  // 'skip', not an open/undecided application. Without this it would fall
+  // through to 'pending' below and inflate the awaiting-decision count.
+  if (s === 'application skipped') return 'self_filtered';
+  return 'pending'; // evaluated, interested, ready to apply
 }
 
 // --- Rate denominators ---

@@ -17,6 +17,8 @@ const TABS = [
   "INBOX",
   "ALL",
   "EVALUATED",
+  "INTERESTED",
+  "READY TO APPLY",
   "APPLIED",
   "RESPONDED",
   "INTERVIEW",
@@ -24,6 +26,7 @@ const TABS = [
   "HIRED",
   "REJECTED",
   "DISCARDED",
+  "APPLICATION SKIPPED",
   "SKIP",
 ] as const;
 type Tab = (typeof TABS)[number];

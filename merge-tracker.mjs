@@ -142,7 +142,10 @@ try {
 }
 
 // Canonical states and aliases
-const CANONICAL_STATES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Hired', 'Rejected', 'Discarded', 'SKIP'];
+const CANONICAL_STATES = [
+  'Evaluated', 'Interested', 'Ready to Apply', 'Applied', 'Responded', 'Interview',
+  'Offer', 'Hired', 'Rejected', 'Discarded', 'Application Skipped', 'SKIP',
+];
 
 /**
  * Convert raw addition status text into one canonical tracker state.

@@ -12,6 +12,8 @@ export { canonStatus };
 
 export const CANONICAL_STATES = [
   "Evaluated",
+  "Interested",
+  "Ready to Apply",
   "Applied",
   "Responded",
   "Interview",
@@ -19,6 +21,7 @@ export const CANONICAL_STATES = [
   "Hired",
   "Rejected",
   "Discarded",
+  "Application Skipped",
   "SKIP",
 ] as const;
 

@@ -31,7 +31,10 @@ const OUTCOMES = [
   ['Rejected', 'negative', 'the employer said no'],
   ['Discarded', 'discarded', 'withdrawn or the posting died — not an employer decision'],
   ['SKIP', 'self_filtered', 'never sent, by our own choice'],
+  ['Application Skipped', 'self_filtered', 'reviewed and declined, by our own choice — same bucket as SKIP, not "pending"'],
   ['Evaluated', 'pending', 'scored, not sent'],
+  ['Interested', 'pending', 'evaluation confirmed it clears the bar, not sent yet'],
+  ['Ready to Apply', 'pending', 'decided to apply, not sent yet'],
 ];
 
 let ok = true;

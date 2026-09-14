@@ -53,7 +53,17 @@ export function pickAwaitingDecision(applications, scoreOf, limit = 6) {
     // rendered an EMPTY queue — the same silent-hiding failure this module
     // exists to fix. status-alias.mjs is the single alias table and its test
     // loads states.yml, so this cannot drift as a literal regex does.
-    .filter((a) => canonStatus(baseStatus(a.status)) === "EVALUATED")
+    //
+    // Also includes INTERESTED (added 2026-09-13): `interested` is the new
+    // default landing state for a completed evaluation going forward, same
+    // "report written, decision pending" lifecycle stage `evaluated` always
+    // occupied — see templates/states.yml. Existing `Evaluated` rows are
+    // untouched, so this queue must keep matching both, or it empties out as
+    // new evaluations land under the new name instead of the old one.
+    .filter((a) => {
+      const c = canonStatus(baseStatus(a.status));
+      return c === "EVALUATED" || c === "INTERESTED";
+    })
     // A row with no date sorts LAST rather than jumping the queue. "" compares
     // LESS than any real date, and the comparison is descending (b before a),
     // so "least" lands at the end — which is where an undated row belongs in a

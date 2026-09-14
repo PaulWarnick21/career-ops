@@ -49,8 +49,19 @@ const STATUS_RANK = {
   // English canonicals (states.yml labels)
   'skip': 0,
   'discarded': 0,
+  // Terminal, same tier as skip/discarded — reviewed and decided not to
+  // apply. Given an explicit rank rather than relying on the unknown-status
+  // fallback (also 0), so this stays correct even if that fallback ever
+  // changes (2026-09-13).
+  'application skipped': 0,
   'rejected': 1,
   'evaluated': 2,
+  // Same lifecycle stage evaluated has always occupied (report written,
+  // decision pending) — see templates/states.yml (2026-09-13).
+  'interested': 2,
+  // Strictly between evaluated/interested and applied: a fractional rank
+  // avoids renumbering every state below it just to make room for one more.
+  'ready to apply': 2.5,
   'applied': 3,
   'responded': 4,
   'interview': 5,
