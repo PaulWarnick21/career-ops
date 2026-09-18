@@ -33,3 +33,16 @@ plugins:
     enabled: false
     # label: "Job Leads"     # the Gmail label to scan
     # days_back: 7           # how far back to look
+
+  # ── gmail-reply-scan (standalone script, not routed through the plugin engine) ──
+  # Automatic Gmail scan for employer REPLIES (interviews/offers/rejections/etc.),
+  # the counterpart to the `gmail` ingest plugin above (which pulls job LEADS in,
+  # not replies). #1583. Read directly by gmail-reply-scan.mjs, which appends
+  # matched candidates to data/reply-candidates.json for reply-watch.mjs to
+  # classify — nothing here ever writes data/applications.md by itself (see
+  # AGENTS.md "Untrusted External Content"). Reuses the SAME GMAIL_CLIENT_ID +
+  # GMAIL_CLIENT_SECRET + GMAIL_REFRESH_TOKEN as the gmail plugin above — no new
+  # .env keys needed. Run via `node gmail-reply-scan.mjs`.
+  gmail-reply-scan:
+    enabled: false
+    # days_back: 14          # how far back to look

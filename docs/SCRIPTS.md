@@ -35,6 +35,7 @@ All scripts live in the project root as `.mjs` modules. Most are exposed via
 | `npm run invite-match` | `invite-match.mjs` | Fuzzy-match a pasted interview-invite email against `data/applications.md` |
 | `npm run application:init` | `application-artifacts.mjs` | Initialize one versioned application-scoped JD/CV/PDF artifact bundle |
 | `npm run paste-reply` | `paste-reply.mjs` | Manual/no-Gmail input into the `reply-watch.mjs` classification pipeline |
+| `npm run gmail-reply-scan` | `gmail-reply-scan.mjs` | Automatic Gmail scan for employer replies (interview/offer/rejection/etc.) into `reply-watch.mjs`'s classification pipeline — opt-in, `config/plugins.yml` `gmail-reply-scan` block |
 | `npm run freshness` | `check-table-freshness.mjs` | Staleness validator for jurisdiction data tables (`as_of` / `next_effective` watchdog) |
 | `npm run openai:tailor` | `openai-tailor.mjs` | Tailor a CV via any OpenAI-compatible endpoint (headless companion to `openai-eval.mjs`) |
 | `npm run or` | `openrouter-runner.mjs` | Run scan/evaluate/pipeline/apply on OpenRouter free models — no Claude CLI required |
@@ -734,7 +735,7 @@ Multiple matches print as a table; zero matches print a clean message.
 
 ## paste-reply
 
-Manual, no-Gmail input path into `reply-watch.mjs`'s classification pipeline (#1802). `reply-watch.mjs` already classifies employer replies and matches them to tracker rows, but its only input is `data/reply-candidates.json`, and the only planned way to populate that file is a Gmail scanner (#1583, unbuilt, requires OAuth inbox-read access). `paste-reply.mjs` normalizes a pasted (or file-provided) email's subject/from/body into the exact candidate shape `reply-watch.mjs` expects and appends it — existing candidates are never overwritten. It does not classify the reply itself (that stays `reply-watch.mjs`'s job) and never runs `reply-watch.mjs` or touches `data/applications.md`.
+Manual, no-Gmail input path into `reply-watch.mjs`'s classification pipeline (#1802). `reply-watch.mjs` already classifies employer replies and matches them to tracker rows, but its only input is `data/reply-candidates.json`. This is the manual alternative for anyone who doesn't want to grant any tool mailbox access — see `gmail-reply-scan.mjs` below for the automatic counterpart (#1583). `paste-reply.mjs` normalizes a pasted (or file-provided) email's subject/from/body into the exact candidate shape `reply-watch.mjs` expects and appends it — existing candidates are never overwritten. It does not classify the reply itself (that stays `reply-watch.mjs`'s job) and never runs `reply-watch.mjs` or touches `data/applications.md`.
 
 ```bash
 npm run paste-reply                    # interactive: prompts for subject, from, body
@@ -753,6 +754,22 @@ From: <sender>
 If no `Subject:`/`From:` header lines are found, the whole file is treated as the body. After appending, run `node reply-watch.mjs` to classify the new candidate and review suggested tracker updates.
 
 **Exit codes:** `0` candidate appended, `1` missing `--file` argument, input file not found, or no subject/body text found.
+
+---
+
+## gmail-reply-scan
+
+Automatic Gmail scan for employer replies (#1583) — the counterpart to `paste-reply.mjs` above, and to the bundled `gmail` ingest plugin (which pulls job *leads* in; this pulls *replies* in). Opt-in and off by default: enable in `config/plugins.yml` under a `gmail-reply-scan` block (see `config/plugins.example.yml`). Reuses the same `GMAIL_CLIENT_ID`/`GMAIL_CLIENT_SECRET`/`GMAIL_REFRESH_TOKEN` as the `gmail` plugin — no new `.env` keys.
+
+```bash
+npm run gmail-reply-scan            # scan recent mail, append matching candidates
+node gmail-reply-scan.mjs --dry-run # scan and report, write nothing
+node gmail-reply-scan.mjs --limit 100
+```
+
+It reads every tracker row currently in an active status (`Applied`/`Responded`/`Interview`/`Offer` — terminal rows have no transition left for a reply to suggest), lists recent mail (`days_back`, default 14), and keeps only messages `reply-matcher.mjs`'s `matchCandidates()` ties to one of those rows — everything else (newsletters, unrelated mail) is discarded, never written anywhere. A DMARC-failing (unauthenticated) sender is skipped the same way the `gmail` plugin skips one. Matches are appended to `data/reply-candidates.json` **unclassified** — this script never runs `reply-watch.mjs` and never touches `data/applications.md` itself; run `node reply-watch.mjs` afterward (or open the Application Tracker) to classify and confirm tracker updates. A per-message-id cursor (`data/gmail-reply-scan-state.json`) makes repeated/scheduled runs safe — a message already looked at is never re-fetched.
+
+**Exit codes:** `0` ran (including "disabled" and "nothing to watch"), `1` missing Gmail credentials.
 
 ---
 

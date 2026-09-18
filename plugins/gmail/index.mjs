@@ -21,32 +21,11 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import {
   extractUrls, isCleanUrl, isAuthenticEmail, parseRoleAtCompany,
-  getMessageBody, companyFromUrl,
+  getMessageBody, companyFromUrl, getAccessToken,
 } from './_helpers.mjs';
 
-const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const STATE_PATH = 'data/gmail-state.json'; // the plugin's own processed-id cursor
-
-/** Exchange the long-lived refresh token for a short-lived access token. */
-async function getAccessToken({ clientId, clientSecret, refreshToken }, fetchFn = globalThis.fetch) {
-  const res = await fetchFn(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`Gmail token refresh failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-  }
-  const data = await res.json();
-  if (!data.access_token) throw new Error('Gmail token refresh returned no access_token');
-  return data.access_token;
-}
 
 function loadProcessedIds() {
   if (!existsSync(STATE_PATH)) return new Set();

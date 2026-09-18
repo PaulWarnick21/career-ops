@@ -3,6 +3,35 @@
 // contributed by @SparshGarg999 in #1203 (with thanks). Files prefixed with _
 // are never discovered as plugins.
 
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+/**
+ * Exchange the long-lived refresh token for a short-lived access token.
+ * Shared by the `gmail` ingest plugin and `gmail-reply-scan.mjs` (#1583) so
+ * the OAuth exchange exists in exactly one place.
+ * @param {{clientId: string, clientSecret: string, refreshToken: string}} creds
+ * @param {typeof fetch} [fetchFn]
+ * @returns {Promise<string>}
+ */
+export async function getAccessToken({ clientId, clientSecret, refreshToken }, fetchFn = globalThis.fetch) {
+  const res = await fetchFn(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Gmail token refresh failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  }
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Gmail token refresh returned no access_token');
+  return data.access_token;
+}
+
 /**
  * Extract all http/https URLs from a string (plain text or HTML). Normalizes
  * &amp; and strips trailing punctuation. Dedups.
