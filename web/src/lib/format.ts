@@ -22,6 +22,7 @@ export const CANONICAL_STATES = [
   "Rejected",
   "Discarded",
   "Application Skipped",
+  "Below the Bar",
   "SKIP",
 ] as const;
 
@@ -33,7 +34,7 @@ export function statusDot(status: string): string {
   if (c.includes("HIRED") || c.includes("INTERVIEW") || c.includes("OFFER")) return "bg-emerald-400";
   if (c.includes("APPLIED") || c.includes("RESPONDED")) return "bg-sky-400";
   if (c.includes("REJECTED") || c.includes("SKIP")) return "bg-red-400";
-  if (c.includes("DISCARDED")) return "bg-zinc-600";
+  if (c.includes("DISCARDED") || c.includes("BELOW THE BAR")) return "bg-zinc-600";
   return "bg-zinc-500"; // Evaluated / unknown
 }
 

@@ -73,9 +73,9 @@ If a listed company is encountered, the scan reports that it was skipped (never 
 
 See the Company blacklist section in `docs/SCRIPTS.md` for the full behavior and supported workflow.
 
-## What's the difference between `Discarded`, `Application Skipped`, and `SKIP`?
+## What's the difference between `Discarded`, `Application Skipped`, `Below the Bar`, and `SKIP`?
 
-From `templates/states.yml`: `SKIP` is "doesn't fit, don't apply" (never a candidate — filtered before you'd ever review it). `Application Skipped` is "reviewed and decided not to apply" — either straight from an Unreviewed posting, or after a full evaluation confirmed it wasn't worth pursuing; it's a candidate-side decision, not something that happened to an active application. `Discarded` also covers "offer closed" — an event on an application that was further along, not a pre-application review decision. They land in different dashboard groups, so they count differently in your funnel: SKIP is filtering, Application Skipped is a reviewed no, Discarded is dropping out later.
+From `templates/states.yml`: `SKIP` is "doesn't fit, don't apply" (never a candidate — filtered before you'd ever review it). `Application Skipped` is "you reviewed it and decided not to apply" — either straight from an Unreviewed posting, or from Interested after a full evaluation; it's your decision, not something that happened to an active application. `Below the Bar` is the evaluation's verdict, not yours: a full evaluation scored the posting under the apply bar, so it's kept on the tracker (a repost can't look new again) but there was never a decision for you to make. `Discarded` also covers "offer closed" — an event on an application that was further along, not a pre-application review decision. They land in different dashboard groups, so they count differently in your funnel: SKIP is filtering, Below the Bar is the evaluation ruling it out, Application Skipped is your reviewed no, Discarded is dropping out later.
 
 ## Is there only one CV template?
 

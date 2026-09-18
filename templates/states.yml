@@ -85,16 +85,31 @@ states:
     terminal: true
 
   # Distinct from `discarded` (which also covers "offer closed") and from
-  # `skip` (a pre-evaluation "doesn't fit"): this is specifically "reviewed —
-  # from Unreviewed directly, or after a full evaluation — and decided not to
-  # apply." Reachable from #1 Unreviewed, #2 Interested, or #3 Ready to Apply
-  # (changed mind). Terminal — nothing routes out of it automatically; moving
-  # a job back out is a manual, explicit request, never an automated one.
+  # `skip` (a pre-evaluation "doesn't fit"): this is specifically "the user
+  # reviewed it — from Unreviewed directly, or after a full evaluation — and
+  # decided not to apply." Reachable from #1 Unreviewed, #2 Interested, or #3
+  # Ready to Apply (changed mind). It is a person's decision, never an
+  # evaluation's verdict — see `below_the_bar` for that. Terminal — nothing
+  # routes out of it automatically; moving a job back out is a manual,
+  # explicit request, never an automated one.
   - id: application_skipped
     label: Application Skipped
     aliases: []
-    description: Reviewed and decided not to apply (from Unreviewed or after evaluation)
+    description: The user reviewed it and decided not to apply (from Unreviewed or Interested)
     dashboard_group: application_skipped
+    terminal: true
+
+  # #5 in the Sorting Desk lifecycle (added 2026-09-18). A full A–G evaluation
+  # scored the posting below the apply bar, so it stays tracked (a repost can
+  # never look unreviewed again) but no decision was ever the user's to make.
+  # Kept apart from `application_skipped` on purpose: #4 means "the user chose
+  # not to apply", #5 means "the evaluation ruled it out". Only the full-eval
+  # threshold decision writes this state; nobody picks it on the Desk. Terminal.
+  - id: below_the_bar
+    label: Below the Bar
+    aliases: [below-the-bar, below_the_bar, below bar]
+    description: Full evaluation scored below the apply bar — ruled out by the evaluation, not by a decision
+    dashboard_group: below_the_bar
     terminal: true
 
   - id: hired

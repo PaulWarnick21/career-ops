@@ -492,7 +492,8 @@ One TSV file per evaluation at `batch/tracker-additions/{num}-{company-slug}.tsv
 | `Hired` | Offer accepted — landed the job (terminal success) |
 | `Rejected` | Rejected by company |
 | `Discarded` | Discarded by candidate or offer closed |
-| `Application Skipped` | Reviewed and decided not to apply — from `Unreviewed` directly, or after a full evaluation. Distinct from `Discarded` (which also covers "offer closed") and `SKIP` (a pre-evaluation "doesn't fit"). Terminal — nothing routes out of it automatically |
+| `Application Skipped` | The user reviewed it and decided not to apply — from `Unreviewed` directly, or from `Interested` after a full evaluation. A person's decision, never an evaluation's verdict (see `Below the Bar`). Distinct from `Discarded` (which also covers "offer closed") and `SKIP` (a pre-evaluation "doesn't fit"). Terminal — nothing routes out of it automatically |
+| `Below the Bar` | A full evaluation scored the posting below the apply bar (Sorting Desk #5). Written only by the full-eval threshold decision, never chosen by a person; keeps the posting tracked so a repost can't look unreviewed again. Terminal |
 | `SKIP` | Doesn't fit, don't apply |
 
 **RULES:**

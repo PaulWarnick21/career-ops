@@ -18,12 +18,12 @@ export const BATCH_CAP = 12; // hard ceiling on a single fan-out
 // Canonical states (templates/states.yml) — the web validates against the same set.
 const CANON_STATUS = [
   "Evaluated", "Interested", "Ready to Apply", "Applied", "Responded", "Interview",
-  "Offer", "Hired", "Rejected", "Discarded", "Application Skipped", "SKIP",
+  "Offer", "Hired", "Rejected", "Discarded", "Application Skipped", "Below the Bar", "SKIP",
 ];
 
 const TAB_VALUES = [
   "INBOX", "ALL", "EVALUATED", "INTERESTED", "READY TO APPLY", "APPLIED", "RESPONDED",
-  "INTERVIEW", "OFFER", "HIRED", "REJECTED", "DISCARDED", "APPLICATION SKIPPED", "SKIP",
+  "INTERVIEW", "OFFER", "HIRED", "REJECTED", "DISCARDED", "APPLICATION SKIPPED", "BELOW THE BAR", "SKIP",
 ] as const;
 const SORT_VALUES = ["company", "role", "score", "status", "date"] as const;
 

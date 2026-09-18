@@ -123,6 +123,10 @@ export function classifyOutcome(status) {
   // 'skip', not an open/undecided application. Without this it would fall
   // through to 'pending' below and inflate the awaiting-decision count.
   if (s === 'application skipped') return 'self_filtered';
+  // A full evaluation ruled it out (Desk #5, 2026-09-18). Also terminal and
+  // candidate-side — the evaluation is the user's own filter, not an employer
+  // decision — so it belongs in the same bucket as 'skip'.
+  if (s === 'below the bar') return 'self_filtered';
   return 'pending'; // evaluated, interested, ready to apply
 }
 

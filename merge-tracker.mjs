@@ -144,7 +144,7 @@ try {
 // Canonical states and aliases
 const CANONICAL_STATES = [
   'Evaluated', 'Interested', 'Ready to Apply', 'Applied', 'Responded', 'Interview',
-  'Offer', 'Hired', 'Rejected', 'Discarded', 'Application Skipped', 'SKIP',
+  'Offer', 'Hired', 'Rejected', 'Discarded', 'Application Skipped', 'Below the Bar', 'SKIP',
 ];
 
 /**

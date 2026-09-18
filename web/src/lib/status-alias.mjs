@@ -75,6 +75,10 @@ export const STATUS_ALIAS = {
   "uygun_değil": "SKIP",
   "uygun degil": "SKIP",
   uygun_degil: "SKIP",
+  // Below the Bar — states.yml `below_the_bar` (Sorting Desk #5, 2026-09-18)
+  "below-the-bar": "BELOW THE BAR",
+  below_the_bar: "BELOW THE BAR",
+  "below bar": "BELOW THE BAR",
   // Hired — states.yml `hired`
   contratado: "HIRED",
   contratada: "HIRED",

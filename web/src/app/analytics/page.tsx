@@ -5,8 +5,9 @@ import { cumulativeTiles } from "@/lib/funnel-tiles.mjs";
 
 export const dynamic = "force-dynamic";
 
-// Application Skipped is intentionally omitted here, same reasoning as SKIP
-// above it in templates/states.yml: it's an opt-out, not a funnel stage.
+// Application Skipped and Below the Bar are intentionally omitted here, same
+// reasoning as SKIP above them in templates/states.yml: an opt-out (yours, or
+// the evaluation's) is not a funnel stage.
 const STAGES: { key: string; label: string }[] = [
   { key: "EVALUATED", label: "Evaluated" },
   { key: "INTERESTED", label: "Interested" },

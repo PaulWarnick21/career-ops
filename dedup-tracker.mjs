@@ -54,6 +54,10 @@ const STATUS_RANK = {
   // fallback (also 0), so this stays correct even if that fallback ever
   // changes (2026-09-13).
   'application skipped': 0,
+  // Terminal, same tier — a full evaluation scored it under the bar (Desk #5,
+  // 2026-09-18). Distinct from application skipped so the user's own decision
+  // is never confused with the evaluation's verdict.
+  'below the bar': 0,
   'rejected': 1,
   'evaluated': 2,
   // Same lifecycle stage evaluated has always occupied (report written,

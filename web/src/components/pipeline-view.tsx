@@ -27,6 +27,7 @@ const TABS = [
   "REJECTED",
   "DISCARDED",
   "APPLICATION SKIPPED",
+  "BELOW THE BAR",
   "SKIP",
 ] as const;
 type Tab = (typeof TABS)[number];

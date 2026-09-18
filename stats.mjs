@@ -40,7 +40,7 @@ const PORTAL_HEALTH_FILE = join(DATA_ROOT, 'data', 'portal-health.tsv');
 
 const CANONICAL_STATUSES = [
   'Evaluated', 'Interested', 'Ready to Apply', 'Applied', 'Responded', 'Interview',
-  'Offer', 'Hired', 'Rejected', 'Discarded', 'Application Skipped', 'SKIP',
+  'Offer', 'Hired', 'Rejected', 'Discarded', 'Application Skipped', 'Below the Bar', 'SKIP',
 ];
 
 // states.yml ids are lowercase snake_case; a naive "capitalize the first
@@ -52,6 +52,7 @@ const ID_LABEL_OVERRIDES = {
   skip: 'SKIP',
   ready_to_apply: 'Ready to Apply',
   application_skipped: 'Application Skipped',
+  below_the_bar: 'Below the Bar',
 };
 
 // In-flight applications. Deliberately NARROWER than the dashboard's
