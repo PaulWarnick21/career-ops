@@ -1,0 +1,249 @@
+{
+  "comments": "21/08/2026: Cursor pagination is now available and is the preferred way to page through the feed. Pass the nextCursor value from each response back as ?cursor=. It is faster than offset and will never return the same job twice. The offset parameter is deprecated and will be removed in a future release. 13/03/2026: The API has been updated to include the companySlug field in the response.",
+  "updatedAt": 1789858244,
+  "offset": 0,
+  "limit": 20,
+  "totalCount": 354,
+  "jobs": [
+    {
+      "title": "Engineering Manager - Desktop Apps",
+      "excerpt": "Acme Linux builds an open source operating system used by enterprises and developers.",
+      "companyName": "Acme Linux",
+      "companySlug": "acme-linux",
+      "companyLogo": "https://cdn-images.himalayas.app/acme-linux-logo",
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Manager"
+      ],
+      "currency": null,
+      "locationRestrictions": [],
+      "timezoneRestrictions": [
+        -11,
+        -10,
+        -9.5,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        -4,
+        -3.5,
+        -3,
+        -2,
+        -1,
+        0,
+        1,
+        2,
+        3,
+        3.5,
+        4,
+        4.5,
+        5,
+        5.5,
+        5.75,
+        6,
+        6.5,
+        7,
+        8,
+        8.75,
+        9,
+        9.5,
+        10,
+        10.5,
+        11,
+        12,
+        12.75,
+        13,
+        14
+      ],
+      "categories": [
+        "Engineering-Management",
+        "Software-Engineering-Manager",
+        "Linux-Engineering",
+        "Open-Source-Infrastructure",
+        "Technology-Leadership",
+        "Desktop-Engineering-Manager",
+        "Engineering-Manager",
+        "UI-Engineering-Manager",
+        "Ubuntu-Engineering",
+        "Linux-Systems-Engineering-Manager"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<p><a href=\"https://himalayas.app/companies/acme-linux\">Acme Linux</a> Linux builds an open source operating system used by enterprises and developers.</p><p>Lead a team of engineers.</p>",
+      "pubDate": 1789858244,
+      "expiryDate": 1795042243,
+      "applicationLink": "https://himalayas.app/companies/acme-linux/jobs/engineering-manager-desktop-apps",
+      "guid": "https://himalayas.app/companies/acme-linux/jobs/engineering-manager-desktop-apps"
+    },
+    {
+      "title": "Platform Engineering Manager",
+      "excerpt": "Acme Linux builds an open source operating system used by enterprises and developers.",
+      "companyName": "Acme Linux",
+      "companySlug": "acme-linux",
+      "companyLogo": "https://cdn-images.himalayas.app/acme-linux-logo",
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Manager"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Canada",
+        "Germany",
+        "India",
+        "Netherlands",
+        "United Kingdom",
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        -4,
+        -3.5,
+        0,
+        1,
+        5.5,
+        14
+      ],
+      "categories": [
+        "Engineering-Management",
+        "Software-Engineering-Management",
+        "Ubuntu-Engineering",
+        "Linux-Engineering",
+        "Open-Source-Development",
+        "Engineering-Manager",
+        "Linux-Systems-Engineering-Manager",
+        "Embedded-Linux-Engineering-Manager",
+        "Cloud-Engineering-Manager",
+        "Software-Engineering-Manager",
+        "DevOps-Engineering-Manager",
+        "Engineering-Leader"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<p><a href=\"https://himalayas.app/companies/acme-linux\">Acme Linux</a> Linux builds an open source operating system used by enterprises and developers.</p><p>Lead a team of engineers.</p>",
+      "pubDate": 1789158813,
+      "expiryDate": 1791703484,
+      "applicationLink": "https://himalayas.app/companies/acme-linux/jobs/platform-engineering-manager",
+      "guid": "https://himalayas.app/companies/acme-linux/jobs/platform-engineering-manager"
+    },
+    {
+      "title": "Engineering Manager, Service Platform",
+      "excerpt": "ExampleCo runs an online grocery marketplace.",
+      "companyName": "ExampleCo",
+      "companySlug": "exampleco",
+      "companyLogo": "https://cdn-images.himalayas.app/exampleco-logo",
+      "employmentType": "Full Time",
+      "minSalary": 196000,
+      "maxSalary": 207000,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Manager"
+      ],
+      "currency": "USD",
+      "locationRestrictions": [
+        "Canada"
+      ],
+      "timezoneRestrictions": [
+        -8,
+        -7,
+        -6,
+        -5,
+        -4,
+        -3.5
+      ],
+      "categories": [
+        "Engineering-Manager",
+        "Service-Platform",
+        "Platform-Engineering",
+        "Deployment-Engineering",
+        "Release-Engineering",
+        "Platform-Engineering-Manager",
+        "Service-Engineering-Manager",
+        "Cloud-Platform-Engineering-Manager"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<p><a href=\"https://himalayas.app/companies/exampleco\">ExampleCo</a> runs an online grocery marketplace.</p><p>Lead a team of engineers.</p>",
+      "pubDate": 1788439551,
+      "expiryDate": 1793623550,
+      "applicationLink": "https://himalayas.app/companies/exampleco/jobs/engineering-manager-service-platform",
+      "guid": "https://himalayas.app/companies/exampleco/jobs/engineering-manager-service-platform"
+    },
+    {
+      "title": "Engineering Manager, Data & Machine Learning",
+      "excerpt": "BigCo maps forests from satellite imagery.",
+      "companyName": "BigCo",
+      "companySlug": "bigco",
+      "companyLogo": "https://cdn-images.himalayas.app/bigco-logo",
+      "employmentType": "Full Time",
+      "minSalary": null,
+      "maxSalary": null,
+      "salaryPeriod": "annual",
+      "seniority": [
+        "Manager"
+      ],
+      "currency": null,
+      "locationRestrictions": [
+        "Canada",
+        "Denmark",
+        "Estonia",
+        "France",
+        "Ireland",
+        "Netherlands",
+        "Portugal",
+        "Sweden",
+        "United Kingdom",
+        "United States"
+      ],
+      "timezoneRestrictions": [
+        -10,
+        -9,
+        -8,
+        -7,
+        -6,
+        -5,
+        -4,
+        -3.5,
+        -1,
+        0,
+        1,
+        2,
+        14
+      ],
+      "categories": [
+        "Engineering-Management",
+        "Machine-Learning-Engineering",
+        "Data-Engineering",
+        "Data-Science",
+        "Engineering-Leadership",
+        "Senior-Machine-Learning-Engineering-Manager",
+        "Data-Engineering-Manager",
+        "AI-ML-Engineering-Manager",
+        "ML-Engineering-Manager",
+        "Engineering-Manager"
+      ],
+      "parentCategories": [
+        "Developer"
+      ],
+      "description": "<p><a href=\"https://himalayas.app/companies/bigco\">BigCo</a> maps forests from satellite imagery.</p><p>Lead a team of engineers.</p>",
+      "pubDate": 1787132142,
+      "expiryDate": 1792316141,
+      "applicationLink": "https://himalayas.app/companies/bigco/jobs/engineering-manager-data-machine-learning",
+      "guid": "https://himalayas.app/companies/bigco/jobs/engineering-manager-data-machine-learning"
+    }
+  ]
+}

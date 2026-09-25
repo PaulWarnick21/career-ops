@@ -1283,8 +1283,17 @@ search_queries:
 # -- Remote-job feeds  (→ job_boards:; set provider: plus any provider-specific fields) --
 # title_filter / location_filter defined above still apply.
 #
-# - name: Himalayas
+# - name: Himalayas                       # remote-only board, per-country eligibility
 #   provider: himalayas
+#   # Without a himalayas: block this reads only the 20 newest postings
+#   # board-wide (the API's per-request cap). The block switches to the
+#   # search endpoint, paginated per query:
+#   himalayas:
+#     queries: ["software engineer"]      # one sweep per query; optional if country is set
+#     country: US                         # ISO alpha-2 or a country name; optional
+#     max_pages: 10                       # per query, 20 jobs/page (default 10, max 50)
+#   enabled: true
+#
 # - name: Landing.jobs                    # tech board, Europe-focused
 #   provider: landingjobs
 #   enabled: true
