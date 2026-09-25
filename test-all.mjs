@@ -7403,6 +7403,9 @@ try {
   // Case 9i: 2-letter codes do not match inside other words, and English
   // "or"/"in" in a multi-location string is not Oregon/Indiana. always_allow
   // is checked before block, so a leak would rescue these rather than reject.
+  // (IN is also India's ISO code, so it only counts as Indiana where the
+  // segment hits no block keyword — "Dublin, IN" under block: [dublin] is
+  // covered in tests/scan-location-us-state-collisions.test.mjs.)
   const usAbbrevLeakFilter = buildLocationFilter({
     always_allow: ['united states'],
     allow: ['united states', 'usa'],
@@ -7413,7 +7416,7 @@ try {
     usAbbrevLeakFilter('Hyderabad, India') === false &&
     usAbbrevLeakFilter('Dublin, India') === false &&
     usAbbrevLeakFilter('Portland, OR') === true &&
-    usAbbrevLeakFilter('Dublin, IN') === true
+    usAbbrevLeakFilter('Fishers, IN') === true
   ) {
     pass('USPS abbrevs do not match inside India / English or-in conjunctions');
   } else {

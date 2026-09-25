@@ -219,7 +219,9 @@ export function matchedTitleKeywords(title, titleFilter) {
 //     the home region is an option, even though "france" is blocked). When
 //     always_allow names the US as a country (united states / usa / u.s. /
 //     u.s.a.), USPS state names and 2-letter codes are additional always_allow
-//     matches, so block: [Dublin] does not drop "Dublin, OH".
+//     matches, so block: [Dublin] does not drop "Dublin, OH". Codes that are
+//     also ISO country codes (IN, DE, IL, ...) count only in a location
+//     segment with no `block` hit, so "Bengaluru, IN" is not Indiana.
 //   - `block` matches → reject
 //   - `allow` empty → pass (already cleared block)
 //   - `allow` non-empty → must match at least one keyword, OR the TITLE carries
@@ -336,10 +338,56 @@ function compileUsStateAbbrev(abbr) {
   return (lower) => re.test(lower);
 }
 
-const US_STATE_ALWAYS_ALLOW_MATCHERS = USPS_STATES.flatMap(([name, abbr]) => [
-  compileLocationKeyword(name),
-  compileUsStateAbbrev(abbr),
+// USPS codes that are also ISO 3166-1 country codes. ATSs write the country
+// code after a foreign city exactly the way they write a state after a US one
+// — "Bengaluru, IN" (India), "Berlin, DE" (Germany), "Tel Aviv, IL" (Israel),
+// "Bogota, CO" (Colombia) — and since always_allow runs before block, reading
+// them as Indiana / Delaware / Illinois / Colorado let those postings past the
+// user's own block entries. (Some double as foreign subdivision codes too:
+// "Chennai, TN, IN" is Tamil Nadu, "Florianópolis, SC" Santa Catarina.)
+//
+// These codes still count as a US state, but only inside a location segment
+// that does not itself hit a `block` keyword (see ambiguousUsStateRescues). The
+// accepted cost: a US town sharing its name with a blocked foreign city
+// ("Warsaw, IN" under block: [Warsaw]) is rejected. Listing the exact string
+// in always_allow ("Warsaw, IN") keeps it, since that is a plain keyword.
+//
+// Six ISO collisions are deliberately left OUT, because the US reading
+// dominates job postings and a well-known US city would be lost to a commonly
+// blocked foreign homonym, while the foreign reading is rare or never used:
+//   ca  Dublin, CA (Canada is usually "ON, CA" with an unblocked city anyway)
+//   ky  London, KY           ma  Cambridge, MA        al  Birmingham, AL
+//   ga  Athens / Rome, GA    va  Vienna / Alexandria, VA (Vatican City)
+const US_STATE_AMBIGUOUS_ABBREVS = new Set([
+  'ar', 'az', 'co', 'de', 'id', 'il', 'in', 'la', 'md', 'me',
+  'mn', 'mo', 'ms', 'mt', 'nc', 'ne', 'pa', 'sc', 'sd', 'tn',
 ]);
+
+const US_STATE_ALWAYS_ALLOW_MATCHERS = USPS_STATES.flatMap(([name, abbr]) =>
+  US_STATE_AMBIGUOUS_ABBREVS.has(abbr)
+    ? [compileLocationKeyword(name)]
+    : [compileLocationKeyword(name), compileUsStateAbbrev(abbr)]);
+
+const US_STATE_AMBIGUOUS_MATCHERS = USPS_STATES
+  .filter(([, abbr]) => US_STATE_AMBIGUOUS_ABBREVS.has(abbr))
+  .map(([, abbr]) => compileUsStateAbbrev(abbr));
+
+// Separators between the locations of a multi-location posting ("Seattle, WA;
+// Hyderabad, India", "Austin, TX · Remote", "NYC / Pittsburgh, PA"). Never the
+// comma, which lives inside one location, and never " - ", which ATSs also use
+// inside one ("Bengaluru - IN").
+const LOCATION_SEGMENT_SPLIT_RE = /\s*(?:[;|·•\r\n]|\s\/\s)\s*/;
+
+// An ambiguous code rescues only from a segment the user has not blocked, so
+// "Pittsburgh, PA · Bengaluru, IN" keeps its US office while "Bengaluru, IN"
+// on its own falls through to block. Segment-scoped rather than whole-string,
+// or one blocked office would cancel the US option in the same posting.
+function ambiguousUsStateRescues(text, block) {
+  return text.split(LOCATION_SEGMENT_SPLIT_RE).some((segment) =>
+    segment !== '' &&
+    US_STATE_AMBIGUOUS_MATCHERS.some((m) => m(segment)) &&
+    !block.some((m) => m(segment)));
+}
 
 // Some providers report a rolled-up display string ("5 Locations", "2 Locations")
 // while the canonical URL still names the real primary location. Workday is the
@@ -430,7 +478,8 @@ export function buildLocationFilter(locationFilter) {
   // in block. "Dublin, OH" does not contain "United States", so without this
   // expansion block: [Dublin] rejects a real US job. Opt-in on the country
   // token — configs with no US always_allow entry are unchanged.
-  if (alwaysAllowKeywords.some(k => US_COUNTRY_ALWAYS_ALLOW.has(k))) {
+  const usStateRescue = alwaysAllowKeywords.some(k => US_COUNTRY_ALWAYS_ALLOW.has(k));
+  if (usStateRescue) {
     alwaysAllow.push(...US_STATE_ALWAYS_ALLOW_MATCHERS);
   }
   const allow = compileLocationKeywordList(locationFilter.allow);
@@ -462,6 +511,11 @@ export function buildLocationFilter(locationFilter) {
     // a genuinely US role whose display string says "United States" is never
     // rejected because of what its URL happens to contain.
     if (alwaysAllow.length > 0 && alwaysAllow.some(matches)) return true;
+    // Still the always_allow tier, but block-aware: see US_STATE_AMBIGUOUS_ABBREVS.
+    if (usStateRescue && (
+      (lower !== '' && ambiguousUsStateRescues(lower, block)) ||
+      (hint !== '' && ambiguousUsStateRescues(hint, block))
+    )) return true;
     if (block.length > 0 && block.some(matches)) return false;
     if (allow.length === 0) return true;
     if (allow.some(matches)) return true;
