@@ -187,6 +187,55 @@ function sweep(dir, dnsCode, extraArgs = []) {
   }
 }
 
+// --- a checkpoint whose board list changed restarts the source, never exits ---
+// resumeAt indexes the source's board list, which toEntry builds from the
+// dataset. New mapping code (the iCIMS fix of 2026-09-24 reshaped that list
+// from 10,108 to 8,769 boards) leaves the dataset hash untouched, so only the
+// board-list fingerprint can tell the offset is stale. The old response to a
+// stale offset was exit 1 with "delete the checkpoint", and auto-scan.mjs
+// passes --resume whenever a same-scope checkpoint exists, so every later
+// scheduled run failed the same way. Both arms must finish the sweep instead.
+for (const [label, tamper, expectScanned] of [
+  // A checkpoint from different mapping code: restart from the source's
+  // pre-sweep counters, so the abandoned partial pass is not counted twice.
+  ['board list changed', (cur) => ({ ...cur, entriesHash: 'written-by-older-mapping' }), (at) => COMPANIES],
+  // A checkpoint written before entriesHash existed carries no baseline to
+  // restore, so its partial count stays in; what matters is that it completes.
+  ['pre-fingerprint checkpoint', ({ entriesHash, baseCounters, ...cur }) => cur, (at) => COMPANIES + at],
+]) {
+  const dir = makeSandbox();
+  try {
+    const cpPath = join(dir, CHECKPOINT_REL);
+    if (sweep(dir, 'EAI_AGAIN') === null || !existsSync(cpPath)) {
+      fail(`${label}: outage sweep left no checkpoint to tamper with${formatRunFailure()}`);
+      continue;
+    }
+    const cp = JSON.parse(readFileSync(cpPath, 'utf-8'));
+    const at = cp.current?.resumeAt;
+    if (!cp.current?.entriesHash || !cp.current?.baseCounters) {
+      fail(`${label}: a fresh mid-source checkpoint is missing entriesHash/baseCounters: ${JSON.stringify(cp.current)}`);
+      continue;
+    }
+    cp.current = tamper(cp.current);
+    writeFileSync(cpPath, JSON.stringify(cp), 'utf-8');
+
+    const resumed = sweep(dir, 'ENOTFOUND', ['--resume']);
+    if (resumed === null) {
+      fail(`${label}: --resume exited non-zero instead of restarting the source${formatRunFailure()}`);
+    } else {
+      const { companiesScanned, resumed: wasResumed } = JSON.parse(resumed);
+      const want = expectScanned(at);
+      if (wasResumed && companiesScanned === want && !existsSync(cpPath)) {
+        pass(`${label}: --resume restarts the source from its first board and completes (${companiesScanned} scanned)`);
+      } else {
+        fail(`${label}: resumed=${wasResumed} companiesScanned=${companiesScanned} (want ${want}) checkpointLeft=${existsSync(cpPath)}`);
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // --- a sweep that merely hit dead boards still cleans up after itself ---
 {
   const dir = makeSandbox();

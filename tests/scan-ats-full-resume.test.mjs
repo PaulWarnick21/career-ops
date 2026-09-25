@@ -176,6 +176,32 @@ const { loadCheckpoint, checkpointCompatible } = mod;
   else fail('datasetFingerprint missed reordering');
 }
 
+// resumeDrift: a mid-source offset is only trusted when the board list it
+// indexes is provably the one it was written against. The entries arm matters
+// most: a mapping change reshapes the list under an unchanged dataset, so the
+// dataset hash alone would resume at an offset that names a different board.
+{
+  const { resumeDrift } = mod;
+  const now = { datasetLen: 3, datasetHash: 'd1', entriesHash: 'e1' };
+  const cur = { name: 'icims', resumeAt: 2, datasetLen: 3, datasetHash: 'd1', entriesHash: 'e1' };
+  if (resumeDrift(cur, now) === null) pass('resumeDrift: identical dataset and board list → resumable');
+  else fail(`resumeDrift rejected an identical checkpoint: ${resumeDrift(cur, now)}`);
+
+  const mapped = resumeDrift({ ...cur, entriesHash: 'e0' }, now);
+  if (/board list changed/.test(mapped || '')) pass('resumeDrift: same dataset, different board list (mapping change) → restart');
+  else fail(`resumeDrift missed a board-list change under an unchanged dataset: ${mapped}`);
+
+  if (/dataset changed/.test(resumeDrift({ ...cur, datasetHash: 'd0' }, now) || '')) pass('resumeDrift: dataset content drift → restart');
+  else fail('resumeDrift missed dataset content drift');
+
+  if (/dataset changed/.test(resumeDrift({ ...cur, datasetLen: 4 }, now) || '')) pass('resumeDrift: dataset length drift → restart');
+  else fail('resumeDrift missed dataset length drift');
+
+  const { entriesHash: _e, ...legacy } = cur;
+  if (/predates/.test(resumeDrift(legacy, now) || '')) pass('resumeDrift: checkpoint without entriesHash cannot be verified → restart');
+  else fail(`resumeDrift trusted a checkpoint it cannot verify: ${resumeDrift(legacy, now)}`);
+}
+
 // ── icims SOURCES wiring (Task 8) ───────────────────────────────────
 {
   const { SOURCES } = mod;
@@ -184,13 +210,15 @@ const { loadCheckpoint, checkpointCompatible } = mod;
   } else if (!SOURCES.icims) {
     fail('SOURCES.icims missing');
   } else {
-    const good = SOURCES.icims.toEntry('acmefreight');
-    if (good && good.careers_url === 'https://careers-acmefreight.icims.com/jobs/search?ss=1&in_iframe=1' && good.name === 'acmefreight') {
+    // icims toEntry returns an array of candidate boards (one row can name more
+    // than one); the full mapping is covered by scan-ats-full-icims-mapping.test.mjs.
+    const [good, extra] = SOURCES.icims.toEntry('acmefreight');
+    if (!extra && good && good.careers_url === 'https://careers-acmefreight.icims.com/jobs/search?ss=1&in_iframe=1' && good.name === 'acmefreight') {
       pass('icims toEntry builds canonical portal URL');
     } else {
-      fail(`icims toEntry: ${JSON.stringify(good)}`);
+      fail(`icims toEntry: ${JSON.stringify(SOURCES.icims.toEntry('acmefreight'))}`);
     }
-    if (SOURCES.icims.toEntry('evil/..%2f') === null) pass('icims toEntry rejects non-slug input');
+    if (SOURCES.icims.toEntry('evil/..%2f').length === 0) pass('icims toEntry rejects non-slug input');
     else fail('icims toEntry accepted a hostile slug');
     if (SOURCES.icims.provider?.id === 'icims') pass('icims source wired to icims provider');
     else fail('icims source provider mismatch');

@@ -175,9 +175,29 @@ function saveDeadBoardsBestEffort(rows) {
 // dataset order being byte-for-byte reproducible; a same-length regeneration
 // with different members would pass a bare length check and silently resume at
 // the wrong offset (companies skipped or re-scanned). Hashing the list detects
-// that drift so we can fail loudly instead.
+// that drift so the resume can restart that source instead (see resumeDrift).
 export function datasetFingerprint(list) {
   return createHash('sha1').update(JSON.stringify(list)).digest('hex').slice(0, 16);
+}
+
+// Whether a checkpoint's offset into its in-flight source still points at the
+// same board. resumeAt indexes the source's board list (after toEntry and
+// uniqueEntries), not the raw dataset, so the dataset hash alone can't vouch
+// for it: new mapping code reshapes the list under an unchanged dataset.
+// Returns null when the offset is safe, else why it isn't. A checkpoint from
+// before entriesHash existed can't be verified, so it never resumes mid-source.
+//
+// A mismatch restarts the source rather than exiting. Exiting made the
+// checkpoint permanently unresumable: auto-scan.mjs passes --resume whenever a
+// same-scope checkpoint exists, so every later run failed the same way.
+export function resumeDrift(current, { datasetLen, datasetHash, entriesHash }) {
+  if (current.datasetLen !== datasetLen
+      || (current.datasetHash != null && current.datasetHash !== datasetHash)) {
+    return 'the company dataset changed since the checkpoint';
+  }
+  if (current.entriesHash == null) return 'the checkpoint predates board-list fingerprinting, so its offset cannot be verified';
+  if (current.entriesHash !== entriesHash) return 'the board list changed since the checkpoint (mapping or dedup)';
+  return null;
 }
 
 // Dataset entries are external input destined for URL interpolation — reject
@@ -197,8 +217,54 @@ export function entryOnHost(name, careersUrl, isCanonicalHost) {
   return isCanonicalHost(hostname) ? { name, careers_url: careersUrl } : null;
 }
 
+// iCIMS serves each portal at {portal}-{tenant}.icims.com, and the dataset
+// mixes two shapes: bare tenant ids ("48forty"), which need the default
+// careers- portal prepended (the form upstream's own scraper builds), and full
+// portal subdomains harvested as-is ("careers-48forty", "us-careers-verathon",
+// "ca-careers-torys"). Prepending careers- to every row built
+// careers-careers-48forty.icims.com, which returns 404, so no portal the dataset
+// names in full was ever scanned. Of its 10,108 rows (2026-09-24), 3,255 are
+// careers-X subdomains and 2,843 are other hyphenated forms. A bare id used
+// as-is fails the other way: iCIMS redirects it, and the provider fetches with
+// redirect:'error'.
+//
+// A hyphen is the tell, but not a conclusive one. A one-word slug is always a
+// bare tenant id. A hyphenated slug with a career token is a portal subdomain.
+// Any other hyphenated slug can be either: "team-thefreshmarket" and
+// "apac-cookmedical" are portals, while "fr-moncler" and "apac-berkley" are
+// tenants on the default portal. Nothing in the text separates them, so both
+// candidate hosts are returned; dead-board memory retires the one that keeps
+// returning 404. Measured live 2026-09-24 on 92 sampled rows: 46 boards answered
+// 200 under either form; the old rule reached 11 of them and this rule reaches
+// all 46. It also still builds every one of the 2,638 old-rule hosts that
+// data/dead-boards.tsv had not retired, so no board scanned before is lost.
+const ICIMS_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+export function icimsHosts(slug) {
+  const raw = String(slug);
+  const label = raw.toLowerCase();
+  // SLUG_RE on the raw value first: toLowerCase() can fold non-ASCII (e.g. the
+  // Kelvin sign) into ASCII, which the label check alone would then accept.
+  if (!SLUG_RE.test(raw) || !ICIMS_LABEL_RE.test(label)) return [];
+  const prefixed = `careers-${label}`;
+  const hosts = !label.includes('-') ? [prefixed]
+    : label.includes('career') ? [label]
+    : [label, prefixed];
+  return hosts.filter(h => h.length <= 63); // one DNS label
+}
+
+// Two dataset rows can name one board ("48forty" and "careers-48forty" both
+// resolve to careers-48forty.icims.com). Keep the first so a sweep never
+// fetches a board twice. Order-preserving, so resume offsets stay reproducible.
+export function uniqueEntries(entries) {
+  const seen = new Set();
+  return entries.filter(e => !seen.has(e.careers_url) && seen.add(e.careers_url));
+}
+
 // Each source: the provider module that does the fetching, plus how to turn a
 // dataset entry into a synthetic PortalEntry the provider can detect/fetch.
+// toEntry returns one entry, an array of candidate entries (icims: one row
+// can name more than one possible board), or null to drop the row.
 export const SOURCES = {
   greenhouse: {
     provider: greenhouse,
@@ -244,9 +310,16 @@ export const SOURCES = {
   icims: {
     provider: icims,
     dataset: `${DATASET_BASE}/icims_companies.json`,
-    toEntry: (slug) => SLUG_RE.test(String(slug))
-      ? entryOnHost(String(slug), `https://careers-${slug}.icims.com/jobs/search?ss=1&in_iframe=1`, h => h === `careers-${String(slug).toLowerCase()}.icims.com`)
-      : null,
+    // Named after the tenant for the default portal, so a board keeps the
+    // company name it had before whichever of its two rows ("48forty" or
+    // "careers-48forty") builds it.
+    toEntry: (slug) => icimsHosts(slug)
+      .map(host => entryOnHost(
+        host.startsWith('careers-') ? host.slice('careers-'.length) : host,
+        `https://${host}.icims.com/jobs/search?ss=1&in_iframe=1`,
+        h => h === `${host}.icims.com`,
+      ))
+      .filter(Boolean),
   },
 };
 
@@ -800,6 +873,13 @@ async function main() {
     droppedNoDate, droppedContent,
     noDateSkipCompanies, noDateSkipJobs, cappedBoards,
   });
+  const restoreCounters = (c) => {
+    ({
+      totalCompaniesScanned = 0, totalErrors = 0, totalRetiredBoardsSkipped = 0,
+      droppedNoDate = 0, droppedContent = 0,
+      noDateSkipCompanies = 0, noDateSkipJobs = 0, cappedBoards = 0,
+    } = c);
+  };
   const checkpointBase = () => ({
     version: 1,
     cutoffMs: cutoff,
@@ -873,19 +953,26 @@ async function main() {
       continue;
     }
     const datasetHash = datasetFingerprint(list);
-    const entriesAll = sampleCompanies(list, opts.limit, opts.shuffle).map(source.toEntry).filter(Boolean);
+    const entriesAll = uniqueEntries(sampleCompanies(list, opts.limit, opts.shuffle).flatMap(row => source.toEntry(row) ?? []));
+    const entriesHash = datasetFingerprint(entriesAll.map(e => e.careers_url));
 
     let startAt = 0;
+    // Counters as they stood before this source began. Every mid-source
+    // checkpoint carries them, so a resume that has to restart the source can
+    // drop the abandoned partial pass instead of counting it twice.
+    let sourceBase = snapshotCounters();
     if (checkpoint && checkpoint.current?.name === name) {
-      // datasetHash is absent in checkpoints written before this guard existed;
-      // fall back to the length-only check for those rather than hard-failing.
-      const hashMismatch = checkpoint.current.datasetHash != null
-        && checkpoint.current.datasetHash !== datasetHash;
-      if (checkpoint.current.datasetLen !== list.length || hashMismatch) {
-        console.error(`Error: ${name} company dataset changed since the checkpoint — resume order is no longer valid. Delete ${CHECKPOINT_PATH} and rerun.`);
-        process.exit(1);
+      const cur = checkpoint.current;
+      const drift = resumeDrift(cur, { datasetLen: list.length, datasetHash, entriesHash });
+      if (!drift) {
+        startAt = cur.resumeAt;
+        if (cur.baseCounters) sourceBase = cur.baseCounters;
+      } else {
+        // Safe to rescan: the checkpointed matches were reseeded into seenUrls
+        // above, so boards the interrupted run already covered add no duplicates.
+        if (cur.baseCounters) { restoreCounters(cur.baseCounters); sourceBase = cur.baseCounters; }
+        console.error(`⚠️  ${name}: cannot resume mid-source — ${drift}. Restarting ${name} from its first board; completed sources and ${newOffers.length} checkpointed match(es) are kept.`);
       }
-      startAt = checkpoint.current.resumeAt;
     }
     const entries = entriesAll.slice(startAt);
     totalCompaniesScanned += entries.length;
@@ -959,7 +1046,7 @@ async function main() {
         saveDeadBoardsBestEffort(deadBoards);
         writeCheckpoint({
           ...checkpointBase(),
-          current: { name, resumeAt: startAt + resumeAt, datasetLen: list.length, datasetHash },
+          current: { name, resumeAt: startAt + resumeAt, datasetLen: list.length, datasetHash, entriesHash, baseCounters: sourceBase },
           counters: {
             ...snapshotCounters(),
             totalRetiredBoardsSkipped: totalRetiredBoardsSkipped + deadBoardsSkipped,
@@ -1027,7 +1114,7 @@ async function main() {
       if (!opts.dryRun) {
         checkpointWritten = writeCheckpoint({
           ...checkpointBase(),
-          current: { name, resumeAt: startAt + lastResumeAt, datasetLen: list.length, datasetHash },
+          current: { name, resumeAt: startAt + lastResumeAt, datasetLen: list.length, datasetHash, entriesHash, baseCounters: sourceBase },
           counters: snapshotCounters(),
         });
       }
