@@ -1,0 +1,100 @@
+{
+  "apiVersion": "2.2.16",
+  "documentationUrl": "https://jobi.cy/apidocs",
+  "friendlyNotice": "Thanks for using Jobicy API! Please ensure Jobicy is clearly credited with a direct link to the source, and all application buttons redirect to the original job URL provided in this feed. That’s all! You might be building something amazing, we wish you the best of luck!",
+  "jobCount": 4,
+  "lastUpdate": "2026-09-24T04:55:10+00:00",
+  "appliedFilters": {
+    "count": 200,
+    "geo": "canada",
+    "tag": "engineering manager"
+  },
+  "jobs": [
+    {
+      "id": 900101,
+      "url": "https://jobicy.com/jobs/900101-engineering-manager-mlops-analytics",
+      "jobSlug": "900101-engineering-manager-mlops-analytics",
+      "jobTitle": "Engineering Manager - MLOps & Analytics",
+      "companyName": "Acme Linux",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/acme-linux.png",
+      "jobIndustry": [
+        "Product & Operations"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "Anywhere",
+      "jobLevel": "Midweight",
+      "jobExcerpt": "Acme Linux builds an open source operating system used by enterprises and developers. Lead a team of engineers&hellip;",
+      "jobDescription": "<p><strong>About <a href=\"https://jobicy.com/company/acme-linux\" target=\"_blank\" rel=\"noopener\">Acme Linux</a></strong></p>\n<p>Acme Linux builds an open source operating system. Lead a team of engineers building MLOps and analytics tooling.</p>",
+      "pubDate": "2026-09-24T04:55:10+00:00"
+    },
+    {
+      "id": 900102,
+      "url": "https://jobicy.com/jobs/900102-front-end-engineering-manager-desktop-browser",
+      "jobSlug": "900102-front-end-engineering-manager-desktop-browser",
+      "jobTitle": "Front End Engineering Manager, Desktop Browser",
+      "companyName": "ExampleCo",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/exampleco.png",
+      "jobIndustry": [
+        "Software Engineering"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "Canada",
+      "jobLevel": "Senior",
+      "jobExcerpt": "Why ExampleCo? ExampleCo builds a desktop web browser used by millions&hellip;",
+      "jobDescription": "<p><strong>About <a href=\"https://jobicy.com/company/exampleco\" target=\"_blank\" rel=\"noopener\">ExampleCo</a></strong></p>\n<p>ExampleCo builds a desktop web browser. Manage the front end team.</p>",
+      "pubDate": "2026-09-24T04:40:12+00:00",
+      "salaryMin": 149000,
+      "salaryMax": 220000,
+      "salaryCurrency": "CAD",
+      "salaryPeriod": "yearly"
+    },
+    {
+      "id": 900103,
+      "url": "https://jobicy.com/jobs/900103-manager-software-engineering-operations",
+      "jobSlug": "900103-manager-software-engineering-operations",
+      "jobTitle": "Manager, Software Engineering, Operations",
+      "companyName": "Acme &#038; Sons",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/acme-sons.png",
+      "jobIndustry": [
+        "Software Engineering"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "Canada,  USA",
+      "jobLevel": "Director",
+      "jobExcerpt": "Want to lead engineers building software for field-service businesses&hellip;",
+      "jobDescription": "<p><strong>About <a href=\"https://jobicy.com/company/acme-sons\" target=\"_blank\" rel=\"noopener\">Acme &#038; Sons</a></strong></p>\n<p>Lead engineers building operations software.</p>",
+      "pubDate": "2026-09-19T12:38:40+00:00",
+      "salaryMin": 169200,
+      "salaryMax": 228900,
+      "salaryCurrency": "CAD",
+      "salaryPeriod": "yearly"
+    },
+    {
+      "id": 900104,
+      "url": "https://jobicy.com/jobs/900104-engineering-manager-linux-hardware-enablement",
+      "jobSlug": "900104-engineering-manager-linux-hardware-enablement",
+      "jobTitle": "Engineering Manager - Linux Hardware Enablement",
+      "companyName": "Acme Linux",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2025/06/acme-linux.png",
+      "jobIndustry": [
+        "Software Engineering"
+      ],
+      "jobType": [
+        "Full-Time"
+      ],
+      "jobGeo": "APAC,  EMEA,  LATAM,  Canada,  USA",
+      "jobLevel": "Midweight",
+      "jobExcerpt": "Lead an engineering team that partners with hardware vendors across the full Linux stack&hellip;",
+      "jobDescription": "<p><strong>About <a href=\"https://jobicy.com/company/acme-linux\" target=\"_blank\" rel=\"noopener\">Acme Linux</a></strong></p>\n<p>Lead an engineering team that works across the full Linux stack, from kernel to GUI.</p>",
+      "pubDate": "2026-09-07T07:07:15+00:00"
+    }
+  ],
+  "statusCode": 200,
+  "success": true
+}

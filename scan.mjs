@@ -2394,6 +2394,51 @@ export function computeConsecutiveFailures(healthRecords) {
   return streaks;
 }
 
+// ── Per-entry minimum fetch interval ────────────────────────────────
+// A portals.yml entry may set `min_interval_minutes: N` to be fetched at most
+// once every N minutes — for a source that publishes a polling limit (Jobicy
+// asks integrations not to poll more often than hourly) while the scheduler
+// runs scan.mjs more often than that. The last fetch is the newest
+// data/portal-health.tsv row for the entry's name, whatever its status: a
+// request that failed still reached the source.
+//
+// Those rows are stamped when a run ends, after all its requests went out, so
+// the gap measured here is never longer than the real gap between requests:
+// the gate may hold back a run it could have allowed, but never lets one
+// through early. On the 30-minute auto-scan schedule, N = 60 therefore fetches
+// on every third run (~90 minutes). A --dry-run makes real requests but writes
+// no health row, so it neither counts as a fetch nor is exempt from the gate.
+
+/** Newest portal-health timestamp (epoch ms) per company/board name. */
+export function lastFetchTimes(healthRecords) {
+  const last = new Map();
+  for (const r of healthRecords) {
+    const ms = Date.parse(r.timestamp);
+    if (!r.company || Number.isNaN(ms)) continue;
+    if (!last.has(r.company) || ms > last.get(r.company)) last.set(r.company, ms);
+  }
+  return last;
+}
+
+/**
+ * How long an entry must still wait under its `min_interval_minutes`.
+ * `waitMs` 0 means fetch now: no setting, no recorded fetch, or the interval
+ * has passed. `invalid` flags a setting that is not a positive number; it is
+ * ignored rather than taken as a reason to drop the entry.
+ * @returns {{ waitMs: number, minutes?: number, lastMs?: number, invalid?: boolean }}
+ */
+export function minIntervalGate(entry, lastFetch, now = Date.now()) {
+  const minutes = entry?.min_interval_minutes;
+  if (minutes === undefined || minutes === null) return { waitMs: 0 };
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) return { waitMs: 0, invalid: true };
+  const lastMs = lastFetch.get(entry.name);
+  if (lastMs === undefined) return { waitMs: 0, minutes };
+  const intervalMs = minutes * 60_000;
+  // Capped at one interval, so a future-dated row (clock change) can't park the entry.
+  const waitMs = Math.max(0, Math.min(lastMs + intervalMs - now, intervalMs));
+  return { waitMs, minutes, lastMs };
+}
+
 // ── Parallel fetch with concurrency limit ───────────────────────────
 
 async function parallelFetch(tasks, limit) {
@@ -2544,7 +2589,7 @@ function guardStatusFor(code) {
 const KNOWN_FLAGS = [
   '--dry-run', '--verify', '--headed-fallback', '--throttle', '--rediscover-404',
   '--include-blacklisted', '--company', '--posted-after', '--posted-before',
-  '--since', '--quiet', '--json', '--help', '-h',
+  '--since', '--ignore-min-interval', '--quiet', '--json', '--help', '-h',
 ];
 
 // Flags whose space-separated value is the NEXT argv token (the `--flag=value`
@@ -2566,7 +2611,8 @@ const USAGE = `Usage:
   node scan.mjs --since 7                    # postings from the last 7 days
   node scan.mjs --posted-after 2026-07-01    # absolute lower bound on posting date
   node scan.mjs --posted-before 2026-08-01   # absolute upper bound on posting date
-  node scan.mjs --json                       # emit one machine-readable receipt on stdout
+  node scan.mjs --ignore-min-interval        # also fetch entries whose min_interval_minutes hasn't passed
+  node scan.mjs --json                    # emit one machine-readable receipt on stdout
   node scan.mjs --quiet                      # suppress the manifesto footer
   node scan.mjs --help                       # print this usage block and exit`;
 
@@ -2592,6 +2638,10 @@ async function main() {
   // --include-blacklisted: bypass the data/blacklist.md filter for auditing.
   // Matching postings flow through annotated instead of being counted out.
   const includeBlacklisted = args.includes('--include-blacklisted');
+  // --ignore-min-interval: fetch every entry this run, even one whose
+  // min_interval_minutes hasn't passed (see minIntervalGate). For a deliberate
+  // manual run; the schedule never passes it.
+  const ignoreMinInterval = args.includes('--ignore-min-interval');
   // flagValue reads both `--flag value` and `--flag=value`; a bare indexOf misses
   // the second form entirely and silently falls back to the unfiltered default.
   //
@@ -2714,6 +2764,15 @@ async function main() {
   const resolveErrors = [];
   const agentHandoff = [];
 
+  // Per-entry min_interval_minutes (see minIntervalGate). The portal-health
+  // log is read only when an enabled entry sets one.
+  const intervalGated = !ignoreMinInterval && [...companies, ...boards].some(
+    (e) => e && typeof e === 'object' && e.enabled !== false && e.min_interval_minutes != null,
+  );
+  const lastFetch = intervalGated ? lastFetchTimes(loadPortalHealth()) : new Map();
+  const gateNow = Date.now();
+  const notDue = [];
+
   /**
    * Processes a list of configuration entries, resolves their appropriate data providers,
    * and appends valid entries to the global scanning targets list.
@@ -2729,6 +2788,16 @@ async function main() {
         continue;
       }
       if (filterCompany && !entry.name.toLowerCase().includes(filterCompany)) continue;
+
+      if (intervalGated && entry.min_interval_minutes != null) {
+        const gate = minIntervalGate(entry, lastFetch, gateNow);
+        if (gate.invalid) {
+          console.error(`⚠️  ${entry.name}: min_interval_minutes must be a positive number of minutes, got ${JSON.stringify(entry.min_interval_minutes)} — ignored, fetching every run`);
+        } else if (gate.waitMs > 0) {
+          notDue.push({ name: entry.name, ...gate });
+          continue;
+        }
+      }
 
       const resolved = resolveProvider(entry, providers);
       if (!resolved) {
@@ -2763,6 +2832,11 @@ async function main() {
   parts.push(`${localParserCount} local parser`);
   parts.push(`${skippedCount} skipped — no provider matched`);
   console.log(`Scanning ${parts.join('; ')} via providers`);
+  for (const d of notDue) {
+    const ago = Math.round((gateNow - d.lastMs) / 60_000);
+    const dueIn = Math.ceil(d.waitMs / 60_000);
+    console.log(`⏳ ${d.name}: not due — fetched ${ago} min ago, min_interval_minutes ${d.minutes}; due in ${dueIn} min (--ignore-min-interval to fetch now)`);
+  }
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 3.5. Load the user's do-not-apply list (#1742). Opt-in: absent file =

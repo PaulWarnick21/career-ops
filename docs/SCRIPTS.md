@@ -576,6 +576,12 @@ npm run scan
 node scan.mjs --include-blacklisted   # audit: let blacklisted companies through, annotated
 ```
 
+**Per-entry fetch interval:** a `portals.yml` entry with `min_interval_minutes: N` is fetched at most once every N minutes, for sources that publish a polling limit (Jobicy asks for no more than hourly). The last fetch is the entry's newest `data/portal-health.tsv` row, stamped when that run ended, so the gate never lets a request through early; on a 30-minute schedule, `60` fetches every third run. An entry that isn't due is printed as `⏳ {name}: not due` and skipped for that run. `--ignore-min-interval` fetches it anyway.
+
+```bash
+node scan.mjs --ignore-min-interval   # fetch every entry now, even ones not yet due
+```
+
 **Parallel search lanes (#2271):** all four of `scan.mjs`'s files are overridable by environment variable, so a second search with different targeting (a bridge/income track, a career-change track, or a partner sharing the checkout) can be fully self-contained in one clone:
 
 | Variable | Default |

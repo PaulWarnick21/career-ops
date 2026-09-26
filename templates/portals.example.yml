@@ -1322,8 +1322,16 @@ search_queries:
 #   provider: workingnomads
 #   enabled: true
 #
-# - name: Jobicy
+# - name: Jobicy                          # remote-only board, per-country eligibility
 #   provider: jobicy
+#   # Without a jobicy: block this reads only the 50 newest postings
+#   # board-wide. The block applies the API's own filters, one request per
+#   # tag (200 rows max each; the API has no pagination):
+#   jobicy:
+#     tags: ["software engineer"]         # keyword search, 3-50 chars; optional if geo/industry is set
+#     geo: usa                            # slug from ?get=locations; worldwide roles included
+#     industry: engineering               # ONE slug from ?get=industries; optional
+#   min_interval_minutes: 60              # Jobicy's fair-use ask: poll at most hourly
 #   enabled: true
 #
 # - name: getManfred                      # Spanish/EU tech roles, salary ranges published
@@ -1462,6 +1470,22 @@ search_queries:
 #     careers_url: https://jobs.lever.co/someboard
 #     provider: lever
 #     aggregator: true
+
+# ── min_interval_minutes (optional, per entry) ────────────────────────
+# Fetch this entry at most once every N minutes, however often scan.mjs runs —
+# for a source that publishes a polling limit (Jobicy asks for no more than
+# once an hour). Works on tracked_companies and job_boards entries alike.
+#
+# The last fetch is the entry's newest data/portal-health.tsv row. Those rows
+# are stamped when a run ends, so the gate never lets a request through early,
+# but it can hold one back a run longer than strictly needed: on a 30-minute
+# schedule, 60 fetches on every third run (~90 minutes). An entry that is not
+# due is listed as "⏳ not due" and skipped; `node scan.mjs --ignore-min-interval`
+# fetches it anyway. Entries without the key are fetched on every run.
+#
+#   - name: Jobicy
+#     provider: jobicy
+#     min_interval_minutes: 60
 
 tracked_companies:
 
