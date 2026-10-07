@@ -65,6 +65,8 @@ function isSafeValue(v) {
 //   `api404Authoritative` — defaults to true (a 404/410 means gone). Set to
 //                  false when the provider's public API can 404 a posting that
 //                  is still genuinely live elsewhere (see the `lever` entry).
+//   `on404`      — with api404Authoritative false: the verdict to return on a
+//                  404/410 instead of falling back to the browser (see `ashby`).
 const ATS_PROVIDERS = [
   {
     id: 'greenhouse',
@@ -111,6 +113,17 @@ const ATS_PROVIDERS = [
     // unauthenticated hits (see providers/ashby.mjs). Give it more room than the ATS
     // default so a slow-but-live board doesn't time out into a Playwright fallback.
     timeoutMs: 20_000,
+    // The 404 here is for the whole BOARD, not this posting: a company that
+    // renames its board (Hiive -> Clarity, jobs.ashbyhq.com/hiive ->
+    // /claritymovescapital, 2026-10-06) 404s every old link while the same
+    // job id stays live on the new board. The browser rung can't settle it
+    // either (an unknown org renders an empty shell -> "expired"), so the
+    // answer is an explicit uncertain, which no sweep acts on.
+    api404Authoritative: false,
+    on404: {
+      result: 'uncertain', code: 'ashby_board_missing',
+      reason: 'Ashby job board not found — the company may have renamed or moved its board; search its careers page for this job id before calling it closed',
+    },
     async interpret(res, { jobId }) {
       let json;
       try {
@@ -314,6 +327,7 @@ export function resolveAtsApi(rawUrl) {
       accept: provider.accept,
       interpret: provider.interpret,
       api404Authoritative: provider.api404Authoritative !== false,
+      on404: provider.on404,
     };
   }
   return null;
@@ -335,7 +349,7 @@ export function isAtsPosting(url) {
 export async function checkLivenessViaApi(url) {
   const resolved = resolveAtsApi(url);
   if (!resolved) return null;
-  const { ats, apiUrl, parts, interpret, timeoutMs, throttleMs, accept, api404Authoritative } = resolved;
+  const { ats, apiUrl, parts, interpret, timeoutMs, throttleMs, accept, api404Authoritative, on404 } = resolved;
 
   // Wait out any provider rate limit BEFORE arming the timeout, so the spacing
   // does not eat the budget the request itself needs.
@@ -359,7 +373,7 @@ export async function checkLivenessViaApi(url) {
     }
 
     if (res.status === 404 || res.status === 410) {
-      if (!api404Authoritative) return null; // inconclusive → let Playwright check the real page
+      if (!api404Authoritative) return on404 ? { ...on404 } : null; // inconclusive → the provider's verdict, or let Playwright check the real page
       return { result: 'expired', code: `${ats}_api_gone`, reason: `ATS API ${res.status} — posting removed` };
     }
     if (res.status === 200) {
