@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pass, fail } from './helpers.mjs';
-import { boardKey, loadDeadBoards, recordBoardResult, saveDeadBoards, shouldSkipDeadBoard } from '../dead-boards.mjs';
+import { boardKey, boardResultStatus, loadDeadBoards, recordBoardResult, saveDeadBoards, shouldSkipDeadBoard } from '../dead-boards.mjs';
 
 console.log('\nPersistent dead-board memory (#2840)');
 const root = mkdtempSync(join(tmpdir(), 'career-ops-dead-boards-'));
@@ -54,6 +54,29 @@ try {
   recordBoardResult(partial, 'lever', board, 500, now);
   if (!partial.has(`lever\t${board}`)) pass('transient errors clear partial 404 progress');
   else fail('transient errors kept partial 404 progress');
+
+  // A provider that recognises a "board is gone" answer other than a 404
+  // (Workday's 422, a renamed or closed iCIMS portal's redirect) flags the
+  // error; boardResultStatus turns the flag into the miss a 404 counts as.
+  const gone = Object.assign(new Error('HTTP 422 Unprocessable Entity'), { status: 422, boardGone: true });
+  const unflagged = Object.assign(new Error('HTTP 422 Unprocessable Entity'), { status: 422 });
+  if (boardResultStatus(gone) === 404) pass('a boardGone error records as a miss (404)');
+  else fail(`boardGone error recorded as ${boardResultStatus(gone)}`);
+  if (boardResultStatus(unflagged) === 422 && boardResultStatus(Object.assign(new Error('x'), { status: 503 })) === 503) pass('an unflagged error keeps its own status');
+  else fail('an unflagged error lost its status');
+  if (boardResultStatus(new TypeError('fetch failed')) === undefined && boardResultStatus(null) === undefined && boardResultStatus(undefined) === undefined) pass('a status-less error or no error records no status');
+  else fail('a status-less error was given a status');
+  if (boardResultStatus(Object.assign(new Error('x'), { status: 422, boardGone: 'yes' })) === 422) pass('only boardGone === true counts as gone');
+  else fail('a truthy non-true boardGone was counted as gone');
+  const workdayRows = new Map();
+  const workdayBoard = 'https://acme.wd1.myworkdayjobs.com/old_site';
+  for (let i = 0; i < 3; i++) recordBoardResult(workdayRows, 'workday', workdayBoard, boardResultStatus(gone), now);
+  if (shouldSkipDeadBoard(workdayRows, 'workday', workdayBoard, now)) pass('three boardGone misses retire a board like three 404s');
+  else fail('three boardGone misses did not retire the board');
+  const unflaggedRows = new Map();
+  for (let i = 0; i < 3; i++) recordBoardResult(unflaggedRows, 'workday', workdayBoard, boardResultStatus(unflagged), now);
+  if (!unflaggedRows.size) pass('an unflagged 422 never creates a dead-board record');
+  else fail('an unflagged 422 created a dead-board record');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

@@ -499,7 +499,19 @@ export default {
       return { jobs, total, facets, stopReason, clamped };
     };
 
-    const root = await runQuery({});
+    // CXS answers 422 for a career-site name that no longer exists; the public
+    // page behind it 500s (81 of 81 such dataset boards sampled 2026-10-07).
+    // This first request is the only one whose failure can escape fetch(): a
+    // later page or a facet slice catches its own above. So a 422 here is
+    // about the board itself, and `boardGone` lets dead-board memory
+    // (dead-boards.mjs boardResultStatus) retire it the way it retires a 404.
+    let root;
+    try {
+      root = await runQuery({});
+    } catch (err) {
+      if (err?.status === 422) err.boardGone = true;
+      throw err;
+    }
     const { total, stopReason } = root;
 
     // Set when the split ran out of depth, slices, or splittable facets with

@@ -8,7 +8,7 @@ console.log('\nProvider — icims');
 
 const mod = await import(pathToFileURL(join(ROOT, 'providers/icims.mjs')).href);
 const icims = mod.default;
-const { parseIcimsSearchPage } = mod;
+const { parseIcimsSearchPage, isGonePortalRedirect } = mod;
 
 const ORIGIN = 'https://careers-acmefreight.icims.com';
 const fixture = readFileSync(join(ROOT, 'tests/fixtures/icims-search-page.html'), 'utf-8');
@@ -136,6 +136,55 @@ const mkCtx = (pages) => ({
   } else {
     fail(`icimsTruncated=${jobs.icimsTruncated} jobs=${jobs.length} pages=${mkCtx.calls.length}`);
   }
+}
+
+// ── Gone portals: a renamed or closed portal answers page 0 with a redirect ──
+{
+  const search = `${ORIGIN}/jobs/search?ss=1&pr=0&in_iframe=1`;
+  const redirect = (status, location) => Object.assign(new Error(`HTTP ${status}`), { status, location });
+  const cases = [
+    [redirect(301, 'https://careers-acmefreight2.icims.com/jobs/search?ss=1&in_iframe=1'), true, 'renamed portal (other iCIMS host)'],
+    [redirect(301, 'https://careerhub.example.ie/'), true, 'portal moved off iCIMS'],
+    [redirect(302, `${ORIGIN}/icims2/servlet/icims2?module=Root&action=index`), true, 'closed portal (login servlet)'],
+    [redirect(302, '/?icims_prompt_login=1'), true, 'closed portal (relative login prompt)'],
+    [redirect(302, '/jobs/search?ss=1&pr=0&in_iframe=1&hashed=-123'), false, 'same-host redirect that is not the login'],
+    [redirect(301, null), false, 'redirect with no Location'],
+    [Object.assign(new Error('HTTP 403'), { status: 403 }), false, 'a 403'],
+    [new TypeError('fetch failed'), false, 'a transport failure'],
+  ];
+  for (const [err, want, label] of cases) {
+    if (isGonePortalRedirect(err, search) === want) pass(`isGonePortalRedirect: ${label} → ${want}`);
+    else fail(`isGonePortalRedirect: ${label} expected ${want}`);
+  }
+
+  // fetch(): page 0 asks for redirects unfollowed and flags a gone portal;
+  // later pages keep redirect:'error'.
+  const modes = [];
+  const goneCtx = {
+    transport: 'http',
+    sleep: async () => {},
+    fetchText: async (_url, opts) => {
+      modes.push(opts?.redirect);
+      throw redirect(301, 'https://careers-acmefreight2.icims.com/jobs/search?ss=1&in_iframe=1');
+    },
+  };
+  let thrown = null;
+  try { await icims.fetch({ name: 'acmefreight', careers_url: `${ORIGIN}/jobs/search?ss=1` }, goneCtx); } catch (err) { thrown = err; }
+  if (thrown?.boardGone === true && thrown.status === 301 && modes.join(',') === 'manual') pass('fetch flags a page-0 redirect to another host as boardGone');
+  else fail(`fetch gone portal: boardGone=${thrown?.boardGone} status=${thrown?.status} modes=${modes.join(',')}`);
+
+  modes.length = 0;
+  const liveCtx = {
+    transport: 'http',
+    sleep: async () => {},
+    fetchText: async (url, opts) => {
+      modes.push(opts?.redirect);
+      return Number(new URL(url).searchParams.get('pr')) === 0 ? page(mkCard(1, 'Role A')) : page();
+    },
+  };
+  const liveJobs = await icims.fetch({ name: 'acmefreight', careers_url: `${ORIGIN}/jobs/search?ss=1` }, liveCtx);
+  if (liveJobs.length === 1 && modes.join(',') === 'manual,error') pass('fetch uses redirect:manual on page 0 only');
+  else fail(`fetch redirect modes: ${modes.join(',')} (jobs=${liveJobs.length})`);
 }
 
 // ── enrichDate(): detail-page JSON-LD ───────────────────────────────

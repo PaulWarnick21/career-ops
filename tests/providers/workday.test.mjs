@@ -745,6 +745,33 @@ try {
     fail(`workday non-retryable 4xx warning: expected "after 1 attempts", got ${JSON.stringify(non429Warnings)}`);
   }
 
+  // fetch() boardGone — CXS answers 422 for a career site that no longer
+  // exists, and only the board's first request can surface it. fetch() flags
+  // that error so dead-board memory retires the board; a 422 on a later page
+  // stays an ordinary truncation, and other first-request failures stay
+  // unflagged.
+  {
+    const throwStatus = (status) => async () => { const err = new Error(`HTTP ${status}`); err.status = status; throw err; };
+    let gone = null;
+    try { await workday.fetch(entry, mkWorkdayCtx(throwStatus(422))); } catch (err) { gone = err; }
+    if (gone?.status === 422 && gone.boardGone === true) pass('workday.fetch() flags a first-request 422 as boardGone');
+    else fail(`workday first-request 422: expected a boardGone 422, got ${gone ? `status=${gone.status} boardGone=${gone.boardGone}` : 'no error'}`);
+
+    let notFound = null;
+    try { await workday.fetch(entry, mkWorkdayCtx(throwStatus(404))); } catch (err) { notFound = err; }
+    if (notFound?.status === 404 && notFound.boardGone === undefined) pass('workday.fetch() leaves other first-request failures unflagged');
+    else fail(`workday first-request 404: expected an unflagged 404, got boardGone=${notFound?.boardGone}`);
+
+    const { result: laterJobs } = await captureConsoleErrors(() =>
+      workday.fetch(entry, mkWorkdayCtx(async (_url, opts) => {
+        const body = JSON.parse(opts.body);
+        if (body.offset === 0) return { total: 40, jobPostings: Array.from({ length: 20 }, (_, i) => ({ title: `Job ${i}`, externalPath: `/job/board/${i}` })) };
+        return throwStatus(422)();
+      })));
+    if (laterJobs?.length === 20) pass('workday.fetch() treats a later-page 422 as a truncation, not a gone board');
+    else fail(`workday later-page 422: expected 20 jobs, got ${laterJobs?.length}`);
+  }
+
   // fetch() early-stop — once a page's postings are all clearly past
   // ctx.sinceMs, pagination stops without hitting max_pages, and the
   // "raise max_pages" warning does NOT fire (this isn't a cap hit).

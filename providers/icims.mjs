@@ -50,6 +50,41 @@ function resolveOrigin(entry) {
 const searchUrl = (origin, page) => `${origin}/jobs/search?ss=1&pr=${page}&in_iframe=1`;
 
 /**
+ * Whether the redirect a portal answered its job search with means the portal
+ * is gone. Exported for unit tests.
+ *
+ * A live portal answers its job search with 200. The reverse-scan dataset also
+ * names portals that were renamed, whose old host 301s to the new one
+ * (careers-fti-net → careers-ftidefense) or off iCIMS entirely, and portals
+ * that were closed, which 302 into the iCIMS login servlet. `redirect: 'error'`
+ * reported both as a bare "fetch failed", which dead-board memory has to treat
+ * as unknown, so ~450 of them were re-requested on every deep scan. Sampled
+ * 2026-10-07: 49 of 69 renamed portals point at a host the sweep already scans
+ * on its own, and most of the other 20 are empty or dead.
+ *
+ * Deliberately narrow: a redirect that stays on the same host and is not the
+ * login servlet is left as an ordinary failure.
+ *
+ * @param {any} err - Error from a redirect:'manual' fetch.
+ * @param {string} requestUrl - The URL that produced it.
+ * @returns {boolean}
+ */
+export function isGonePortalRedirect(err, requestUrl) {
+  const status = err?.status;
+  if (typeof status !== 'number' || status < 300 || status > 399 || !err.location) return false;
+  let from;
+  let to;
+  try {
+    from = new URL(requestUrl);
+    to = new URL(err.location, requestUrl);
+  } catch {
+    return false;
+  }
+  if (to.hostname !== from.hostname) return true;
+  return /\/icims2\/servlet\/icims2/i.test(to.pathname) || /[?&]icims_prompt_login=/i.test(to.search);
+}
+
+/**
  * Parse one iCIMS search-results page. Exported for unit tests.
  *
  * Postings are `<li class="iCIMS_JobCardItem">` cards: posting URL in an
@@ -121,7 +156,16 @@ export default {
     let reachedEnd = false;
     for (let pageNum = 0; pageNum < ICIMS_MAX_PAGES; pageNum++) {
       if (pageNum > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
-      const html = await ctx.fetchText(searchUrl(origin, pageNum), { headers: HEADERS, redirect: 'error' });
+      const url = searchUrl(origin, pageNum);
+      let html;
+      try {
+        // Page 0 takes its redirect back unfollowed ('manual') so it can be
+        // classified (see isGonePortalRedirect); every later page keeps 'error'.
+        html = await ctx.fetchText(url, { headers: HEADERS, redirect: pageNum === 0 ? 'manual' : 'error' });
+      } catch (err) {
+        if (pageNum === 0 && isGonePortalRedirect(err, url)) err.boardGone = true;
+        throw err;
+      }
       const pageJobs = parseIcimsSearchPage(html, origin, entry.name);
       if (pageJobs.length === 0) { reachedEnd = true; break; } // past the last page
       // Some tenants serve the last real page again for an out-of-range pr

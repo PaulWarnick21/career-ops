@@ -1,6 +1,8 @@
 // Persistent board-existence memory for reverse ATS sweeps (#2840).
-// Only a real HTTP 404 may advance a miss counter. Throttles, transport
-// failures and DNS errors mean "unknown", never "dead".
+// Only an answer that says the board does not exist may advance a miss
+// counter: a real HTTP 404, or an error its provider flagged `boardGone` (see
+// boardResultStatus). Throttles, transport failures and DNS errors mean
+// "unknown", never "dead".
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -26,6 +28,22 @@ export function loadDeadBoards(file, now = Date.now()) {
 
 export function boardKey(entry) {
   return String(entry?.careers_url || entry?.name || '').trim();
+}
+
+/**
+ * The status to record for a board whose fetch threw.
+ *
+ * Some ATSes say "this board no longer exists" without a 404. Workday's CXS
+ * API answers 422 for a career-site name that is gone (its public page 500s:
+ * 81 of 81 such dataset boards sampled 2026-10-07), and a renamed or closed
+ * iCIMS portal answers its job search with a redirect to another host or into
+ * the login servlet. Only the provider can tell those answers apart from an
+ * ordinary failure, so it sets `err.boardGone`; this maps the flag onto the 404
+ * that recordBoardResult counts, and the same three consecutive misses retire
+ * the board for the same 30 days. Anything unflagged keeps its own status.
+ */
+export function boardResultStatus(err) {
+  return err?.boardGone === true ? 404 : err?.status;
 }
 
 export function shouldSkipDeadBoard(rows, ats, board, now = Date.now()) {
