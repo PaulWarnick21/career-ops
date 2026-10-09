@@ -149,9 +149,15 @@ const ATS_PROVIDERS = [
     // "Toronto-ON-CAN/Agentic-AI-Engineer_R260010125") — isSafeValue (not the
     // single-segment SAFE_SEGMENT check other providers use directly) validates
     // it component-by-component.
+    //
+    // A trailing apply step (`/apply`, `/apply/applyManually`, …) is the same
+    // posting's application form, not part of its id: left in jobPath it makes
+    // the CXS endpoint 404 a LIVE posting, which read as "posting removed".
+    // Seen 2026-10-08 on links from web search and alert emails (KLA _2639643-1:
+    // 404 with /apply, 200 without).
     match(u) {
       const m = `${u.hostname}${u.pathname}`.match(
-        /^([\w-]+)\.(wd[\w-]*)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/(.+?)\/?$/
+        /^([\w-]+)\.(wd[\w-]*)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)\/job\/(.+?)(?:\/[Aa]pply(?:\/[^/]*)?)?\/?$/
       );
       if (!m) return null;
       const [, tenant, shard, site, jobPath] = m;
