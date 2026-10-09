@@ -140,3 +140,70 @@ if (SOURCES.workday.provider === workdayModule.default) {
     fail('providerForSource unexpectedly resolved a seed-pass source to a provider');
   }
 }
+
+// Cross-scanner dedup. scan.mjs records its Workday rows in scan-history.tsv
+// under portal "workday-api", not this sweep's "workday-full", so
+// providerForSource gave them no requisition key — and the sweep compared the
+// requisition key ONLY. A posting scan.mjs had already queued came back from
+// the next sweep under the identical URL (19 such pairs in one install's
+// scan-history.tsv over two weeks, each workday-api then workday-full a day
+// later).
+{
+  const { collectSeenUrls, normalizeUrlForDedup } = await import(pathToFileURL(join(ROOT, 'scan.mjs')).href);
+  const { claimUnseen, dedupTokensFor, recordedUrlTokens } = mod;
+  const SNAP = 'https://snapchat.wd1.myworkdayjobs.com/snap/job/Bellevue-Washington/Manager--Software-Engineering_R0047124';
+  const scanHistoryText = [
+    'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\tlocation',
+    `${SNAP}\t2026-10-08\tworkday-api\tManager, Software Engineering\tSnap\tadded\tBellevue, Washington`,
+    '',
+  ].join('\n');
+
+  // The bug, reproduced with the pre-fix hook and check.
+  {
+    const { seen } = collectSeenUrls({ scanHistoryText }, {}, {
+      extraTokensFor: (url, portal) => providerForSource(portal)?.dedupKey?.({ url }),
+    });
+    if (!seen.has(dedupTokenFor({ url: SNAP }, workdayModule.default))) {
+      pass('reproduces the bug: a workday-api history row never met the requisition-key-only check');
+    } else {
+      fail('fixture no longer reproduces the cross-scanner bug');
+    }
+  }
+
+  const { seen } = collectSeenUrls({ scanHistoryText }, {}, { extraTokensFor: recordedUrlTokens });
+  if (!claimUnseen(seen, { url: SNAP }, workdayModule.default)) {
+    pass('a scan.mjs history row (portal workday-api) blocks the same Workday URL in the full sweep');
+  } else {
+    fail('the full sweep would re-queue a Workday URL scan.mjs already recorded');
+  }
+  if (!claimUnseen(seen, { url: SNAP.replace('/snap/', '/External/') }, workdayModule.default)) {
+    pass('...and the same requisition served under another site of the tenant');
+  } else {
+    fail(`a cross-site variant of a workday-api row was not blocked: ${JSON.stringify(recordedUrlTokens(SNAP))}`);
+  }
+
+  // pipeline.md / applications.md seed plain URLs only: no portal, no key.
+  const { seen: pipelineSeen } = collectSeenUrls({ pipelineText: `- [ ] ${SNAP} | Snap | Manager, Software Engineering\n` }, {}, { extraTokensFor: recordedUrlTokens });
+  if (!claimUnseen(pipelineSeen, { url: SNAP }, workdayModule.default)) {
+    pass('a Workday URL known only from pipeline.md blocks the full sweep too');
+  } else {
+    fail('a pipeline.md URL did not block the same Workday URL');
+  }
+
+  // A fresh job is claimed once; its key and its URL each block a repeat.
+  const fresh = new Set();
+  const first = claimUnseen(fresh, { url: SNAP }, workdayModule.default);
+  const again = claimUnseen(fresh, { url: `${SNAP}?utm_source=feed` }, workdayModule.default);
+  const tokens = dedupTokensFor({ url: SNAP }, workdayModule.default);
+  if (first && !again && tokens.length === 2 && tokens.every((t) => fresh.has(t)) && tokens.includes(normalizeUrlForDedup(SNAP))) {
+    pass('claimUnseen records both the requisition key and the URL, and blocks a repeat');
+  } else {
+    fail(`claimUnseen: ${JSON.stringify({ first, again, tokens, seen: [...fresh] })}`);
+  }
+
+  if (recordedUrlTokens('https://jobs.lever.co/acme/abc_123').length === 0 && recordedUrlTokens('not a url').length === 0) {
+    pass('recordedUrlTokens adds nothing for a URL off every keyed ATS');
+  } else {
+    fail('recordedUrlTokens produced a key for a non-Workday URL');
+  }
+}

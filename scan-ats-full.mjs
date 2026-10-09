@@ -548,12 +548,44 @@ export function dedupTokenFor(job, provider) {
   return provider?.dedupKey?.(job) || normalizeUrlForDedup(job.url);
 }
 
-// Resolve an offer's provider from its recorded `source` string — shared by
-// the checkpoint-resume reseed below and by loadSeenUrls' extraTokensFor
-// hook. `source` is "{sourcesKey}-full" for the main sweep and
-// "{seedId}-seed" for seed offers; SOURCES has no seed entries, so a seed
-// offer's lookup misses and callers fall back to URL-only dedup, unchanged
-// from before #3439.
+// Every token a job is known by: dedupTokenFor's (the provider key when one
+// is derivable) AND the normalized URL. Checking the key alone missed what
+// other scanners recorded: scan.mjs files its Workday rows under portal
+// "workday-api", and pipeline.md / applications.md seed plain URLs only, so a
+// posting scan.mjs had already queued came back from the next sweep under the
+// identical URL (19 such pairs in one install's scan-history.tsv over two
+// weeks). A job is seen when ANY of its tokens is.
+export function dedupTokensFor(job, provider) {
+  return [...new Set([dedupTokenFor(job, provider), normalizeUrlForDedup(job.url)].filter(Boolean))];
+}
+
+// The seen-check both dedup sites in this file share: false when any of the
+// job's tokens was already seen; otherwise records them all (intra-scan
+// dedup) and returns true.
+export function claimUnseen(seen, job, provider) {
+  const tokens = dedupTokensFor(job, provider);
+  if (tokens.some((t) => seen.has(t))) return false;
+  for (const t of tokens) seen.add(t);
+  return true;
+}
+
+// loadSeenUrls' extraTokensFor hook: the provider-scoped tokens a URL some
+// run already recorded is known by, whichever scanner recorded it. Resolving
+// the provider from scan-history.tsv's `portal` only works for this sweep's
+// own "{ats}-full" rows; scan.mjs writes "workday-api", web discovery
+// "websearch". Every dedupKey returns null for a URL off its own ATS
+// (workdayDedupKey: anything not on *.myworkdayjobs.com), so asking each
+// keyed provider is safe.
+export function recordedUrlTokens(url) {
+  return [...new Set(Object.values(SOURCES).map((s) => s.provider?.dedupKey?.({ url })).filter(Boolean))];
+}
+
+// Resolve an offer's provider from its recorded `source` string — used by
+// the checkpoint-resume reseed below (scan-history.tsv rows are keyed from
+// the URL instead: recordedUrlTokens). `source` is "{sourcesKey}-full" for
+// the main sweep and "{seedId}-seed" for seed offers; SOURCES has no seed
+// entries, so a seed offer's lookup misses and callers fall back to URL-only
+// dedup, unchanged from before #3439.
 export function providerForSource(source) {
   return SOURCES[String(source || '').replace(/-full$/, '')]?.provider;
 }
@@ -654,9 +686,7 @@ export async function runSeedScan(seedId, opts, ctx, seenUrls, label) {
       // none currently define dedupKey, so this is the same normalizeUrlForDedup
       // behavior as before; kept via the shared helper so the two dedup sites
       // in this file can't quietly drift apart (#3439).
-      const dedupToken = dedupTokenFor(job, provider);
-      if (seenUrls.has(dedupToken)) continue;
-      seenUrls.add(dedupToken);
+      if (!claimUnseen(seenUrls, job, provider)) continue;
       offers.push({ ...job, source: sourceName, dateStatus: job.postedAt ? 'dated' : 'unknown' });
     }
   });
@@ -802,12 +832,11 @@ async function main() {
   // site A's URL wouldn't be recognized when this run only sees it under
   // site B — the plain normalizeUrlForDedup comparison never matches across
   // sites, and only fresh-run offers were reseeded with the provider key
-  // (#3439). `portal` here is scan-history.tsv's recorded `offer.source`, so
-  // providerForSource resolves it the same way the checkpoint reseed above
-  // does.
-  const { seen: seenUrls } = loadSeenUrls({}, {
-    extraTokensFor: (url, portal) => providerForSource(portal)?.dedupKey?.({ url }),
-  });
+  // (#3439). The key comes from the URL, not the row's `portal`: that names
+  // whichever scanner recorded it ("workday-api" for scan.mjs), and
+  // providerForSource only resolves this sweep's own "-full" rows — see
+  // recordedUrlTokens.
+  const { seen: seenUrls } = loadSeenUrls({}, { extraTokensFor: recordedUrlTokens });
   const blacklist = loadBlacklist();
   // sinceMs and includeUndated let providers (currently only workday.mjs)
   // stop paginating a tenant early instead of always walking to max_pages:
@@ -834,8 +863,8 @@ async function main() {
   const newOffers = checkpoint?.offers || [];
   // Checkpointed matches were already deduped once — without re-seeding, a
   // resumed run re-scanning the in-flight overlap would duplicate them.
-  // Reseed with the SAME token a fresh dedup check would produce (provider
-  // key when the source's provider has one, URL otherwise, matching
+  // Reseed with the SAME tokens a fresh dedup check records (dedupTokensFor:
+  // provider key when the source's provider has one, plus the URL, matching
   // processJobs below) — reseeding by URL alone would miss a Workday
   // requisition's key, letting the other of its two sites' offers back in
   // after a resume even though the pre-checkpoint sweep had already
@@ -844,7 +873,7 @@ async function main() {
   // so a seed offer's lookup misses and falls back to URL — its unchanged,
   // pre-#3439 behavior.
   for (const o of newOffers) {
-    seenUrls.add(dedupTokenFor(o, providerForSource(o.source)));
+    for (const t of dedupTokensFor(o, providerForSource(o.source))) seenUrls.add(t);
   }
   const completedSources = new Set(checkpoint?.completedSources || []);
   const cc = checkpoint?.counters || {};
@@ -927,9 +956,7 @@ async function main() {
       // job.title so a title-stated remote role survives a city-only location.
       if (!locationFilter(job.location, job.url, job.title)) continue;
       if (!contentFilter(job.description, matchedTitleKeywords(job.title, fullTitleFilterConfig))) { droppedContent++; continue; }
-      const dedupToken = dedupTokenFor(job, provider);
-      if (seenUrls.has(dedupToken)) continue;
-      seenUrls.add(dedupToken); // intra-scan dedup
+      if (!claimUnseen(seenUrls, job, provider)) continue; // also the intra-scan dedup
       newOffers.push({ ...job, source: `${sourceName}-full`, dateStatus: job.postedAt ? 'dated' : 'unknown' });
     }
   };
