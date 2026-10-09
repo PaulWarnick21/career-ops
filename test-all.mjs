@@ -6912,31 +6912,36 @@ if (!hasBrowser) {
   if (!liveJobUrl) {
     warn('archive render skipped — Greenhouse API unreachable');
   } else {
-    const JDS_DIR = join(ROOT, 'jds');
-    const startedAt = Date.now();
-    const archiveOut = run('node', ['archive-posting.mjs', liveJobUrl], { timeout: 60000 });
+    // A temporary data root, never the user's jds/: picking "the PDF written
+    // since startedAt" out of the live folder and deleting it would take a real
+    // capture with it if anything else archived a posting during the run.
+    const archiveRoot = mkdtempSync(join(tmpdir(), 'co-archive-root-'));
+    const JDS_DIR = join(archiveRoot, 'jds');
+    const archiveEnv = { ...process.env, CAREER_OPS_ROOT: archiveRoot };
+    delete archiveEnv.CAREER_OPS_DATA_DIR;
+    try {
+      const archiveOut = run('node', ['archive-posting.mjs', liveJobUrl], { timeout: 60000, env: archiveEnv });
 
-    if (archiveOut === null) {
-      fail('live archive: script exited non-zero on live URL');
-    } else {
-      pass('live archive: exited 0');
-
-      const recent = existsSync(JDS_DIR)
-        ? readdirSync(JDS_DIR)
-            .filter(f => f.endsWith('.pdf'))
-            .filter(f => statSync(join(JDS_DIR, f)).mtimeMs >= startedAt)
-        : [];
-
-      if (recent.length === 0) {
-        fail('live archive: no PDF written to jds/ during test run');
+      if (archiveOut === null) {
+        fail('live archive: script exited non-zero on live URL');
       } else {
-        const pdf = join(JDS_DIR, recent[0]);
-        const { size } = statSync(pdf);
-        size > 50 * 1024
-          ? pass(`live archive: PDF has real content (${(size / 1024).toFixed(0)} KB)`)
-          : fail(`live archive: PDF suspiciously small — likely empty page (${size} bytes)`);
-        unlinkSync(pdf);
+        pass('live archive: exited 0');
+
+        const written = existsSync(JDS_DIR)
+          ? readdirSync(JDS_DIR).filter(f => f.endsWith('.pdf'))
+          : [];
+
+        if (written.length === 0) {
+          fail('live archive: no PDF written to jds/ during test run');
+        } else {
+          const { size } = statSync(join(JDS_DIR, written[0]));
+          size > 50 * 1024
+            ? pass(`live archive: PDF has real content (${(size / 1024).toFixed(0)} KB)`)
+            : fail(`live archive: PDF suspiciously small — likely empty page (${size} bytes)`);
+        }
       }
+    } finally {
+      rmSync(archiveRoot, { recursive: true, force: true });
     }
   }
 }
@@ -16328,23 +16333,22 @@ try {
     rmSync(tempRoot, { recursive: true, force: true });
   }
 
-  // 6. Test .career-ops-data marker file resolution
+  // 6. Test .career-ops-data marker file resolution. The marker is read from
+  //    path-resolver.mjs's own directory, so exercise a standalone copy of it
+  //    in a temp checkout. Writing the marker into the real checkout redirects
+  //    the data root of every script that starts while it exists (a scheduled
+  //    scan or merge would read and write the temp root instead).
   const tempMarkerRoot = mkdtempSync(join(ROOT, 'co-temp-marker-'));
-  const markerFile = join(ROOT, '.career-ops-data');
+  const markerCheckout = mkdtempSync(join(tmpdir(), 'co-marker-checkout-'));
   const originalRootEnv = process.env.CAREER_OPS_ROOT;
   const originalDataDirEnv = process.env.CAREER_OPS_DATA_DIR;
   delete process.env.CAREER_OPS_ROOT;
   delete process.env.CAREER_OPS_DATA_DIR;
 
-  const originalMarkerExists = existsSync(markerFile);
-  let originalMarkerContent = '';
-  if (originalMarkerExists) {
-    try { originalMarkerContent = readFileSync(markerFile, 'utf-8'); } catch {}
-  }
-
   try {
-    writeFileSync(markerFile, tempMarkerRoot, 'utf-8');
-    const { getCareerOpsRoot: getRootWithMarker } = await import(pathToFileURL(join(ROOT, 'path-resolver.mjs')).href + '?cachebust=' + Date.now());
+    copyFileSync(join(ROOT, 'path-resolver.mjs'), join(markerCheckout, 'path-resolver.mjs'));
+    writeFileSync(join(markerCheckout, '.career-ops-data'), tempMarkerRoot, 'utf-8');
+    const { getCareerOpsRoot: getRootWithMarker } = await import(pathToFileURL(join(markerCheckout, 'path-resolver.mjs')).href);
     const resolved = getRootWithMarker();
     if (resolved === tempMarkerRoot) {
       pass('getCareerOpsRoot() respects .career-ops-data marker file');
@@ -16352,15 +16356,9 @@ try {
       fail(`getCareerOpsRoot() with marker returned ${resolved}, expected ${tempMarkerRoot}`);
     }
   } finally {
-    try {
-      if (originalMarkerExists) {
-        writeFileSync(markerFile, originalMarkerContent, 'utf-8');
-      } else {
-        unlinkSync(markerFile);
-      }
-    } catch {}
     if (originalRootEnv) process.env.CAREER_OPS_ROOT = originalRootEnv;
     if (originalDataDirEnv) process.env.CAREER_OPS_DATA_DIR = originalDataDirEnv;
+    rmSync(markerCheckout, { recursive: true, force: true });
     rmSync(tempMarkerRoot, { recursive: true, force: true });
   }
 
