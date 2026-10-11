@@ -5,10 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{NAME}} — CV</title>
 <style>
-  /* "warnick" template — matches the layout/typography of Paul's original
-     resume: centered header, blue section headings with a full-width
-     underline rule, italic company names, bold role titles with right-aligned
-     italic blue dates. See templates/README (or ask the agent) for the two
+  /* "warnick" template — started from the layout/typography of Paul's
+     original resume (centered header, two-tone name, bold role titles,
+     right-aligned blue dates). Since 2026-10-11 it carries the "v8 Modern"
+     look Paul picked in the design review: see the override block at the end
+     of this <style> (tracked uppercase headings with a hairline, a promotion
+     rail joining the Ford roles, upright dates, institution-first Education,
+     bold skill labels, symmetric margins, ragged-right text). The base rules
+     below are kept as-is; the override block wins by coming last. See templates/README (or ask the agent) for the two
      known deviations from the original PDF and why: PDF generation runs with
      JavaScript disabled and no network access (ATS-safety/reproducibility by
      design), so (1) the name renders in one weight rather than a thin/bold
@@ -62,9 +66,11 @@
   }
 
   /* === HEADER (centered) === */
+  /* Name, accent bar and contact line read as one block: the gaps inside it
+     are tighter than the gap below it (contacts → first section heading). */
   .header {
     text-align: center;
-    margin-bottom: 6px;
+    margin-bottom: 14px;
   }
 
   .header h1 {
@@ -72,7 +78,7 @@
     font-size: 42px;
     color: #3a3a3a;
     letter-spacing: 0.01em;
-    margin-bottom: 8px;
+    margin-bottom: 0;
     line-height: 1.1;
   }
 
@@ -88,38 +94,78 @@
     font-weight: 700;
   }
 
-  /* No accent gradient bar in this template — the original resume's header
-     has no rule under the name, just centered contact info below it. */
+  /* No full-width gradient bar in this template (the shared .header-gradient
+     hook stays hidden). */
   .header-gradient { display: none; }
 
-  .contact-row {
-    justify-content: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-    font-family: var(--font-family);
-    font-size: 13.5px;
-    line-height: 1.4;
-    color: var(--accent-color);
+  /* Short centered accent bar between the name and the contact line — the
+     same blue as the section rules, so the header and body share one accent
+     language. It also holds the name → contacts gap at ~19px, which keeps
+     the name ahead of the contacts in reading-order PDF extractors (xpdf's
+     default mode put the phone number before the name when the gap was
+     ~6px, because the wide icon gaps let it read the phone as a separate
+     left-hand column). Drawn with h1::after (no extra markup, nothing in the text layer). */
+  .header h1::after {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent-color);
+    margin: 8px auto 9px;
   }
 
-  .contact-row a {
-    color: var(--accent-color);
+  /* === CONTACT LINE — "clean icon line" ===
+     One centered line; every item shares one size, weight and muted
+     dark-gray color, and is led by a small accent-blue line icon. The icons
+     are CSS-only (an empty ::before painted with an inline SVG data URI — no
+     generated text, no network, no JS), so the visible text stays plain,
+     selectable and in reading order for ATS parsers and the PDF text layer.
+     The "|" separators build-cv-html.mjs emits are hidden: even spacing
+     does their job. The SVG stroke is --accent-color as hex (#2b70a1 =
+     hsl(205 58% 40%)) because a data URI can't read a CSS variable — keep
+     the two in sync if the accent ever changes. */
+  .contact-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 4px 23px;
+    font-family: var(--font-family);
+    font-size: 13.25px;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: 0.005em;
+    color: #4f4f4f;
+  }
+
+  .contact-row a,
+  .contact-row .contact-location {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #4f4f4f;
     text-decoration: none;
   }
 
-  /* Email set apart from the other contact links: larger, and black to
-     match the body text instead of the accent blue. (`.contact-row a` is
-     one class + one element selector, so this needs the extra `a` to
-     out-specify it rather than relying on source order.) */
-  .contact-row a.contact-email {
-    font-size: 15px;
-    color: #3a3a3a;
-  }
+  .contact-row .separator { display: none; }
 
-  .contact-row .separator {
-    color: #c8d3dc;
+  .contact-row a::before,
+  .contact-row .contact-location::before {
+    content: "";
+    flex: none;
+    width: 13px;
+    height: 13px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
   }
+  .contact-row .contact-phone::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b70a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'/%3E%3C/svg%3E"); }
+  .contact-row .contact-email::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b70a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7'/%3E%3C/svg%3E"); }
+  .contact-row .contact-linkedin::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b70a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='2.5' width='19' height='19' rx='4'/%3E%3Cpath d='M8 11v6'/%3E%3Cpath d='M8 7.6v.01' stroke-width='2.6'/%3E%3Cpath d='M12 17v-6M12 13.6a2.6 2.6 0 0 1 5.2 0V17'/%3E%3C/svg%3E"); }
+  .contact-row .contact-github::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b70a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4'/%3E%3Cpath d='M9 18c-4.51 2-5-2-7-2'/%3E%3C/svg%3E"); }
+  .contact-row .contact-portfolio::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b70a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20'/%3E%3Cpath d='M2 12h20'/%3E%3C/svg%3E"); }
+  .contact-row .contact-location::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b70a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 10c0 4.99-5.54 10.19-7.4 11.79a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0'/%3E%3Ccircle cx='12' cy='10' r='3'/%3E%3C/svg%3E"); }
 
   .cv-photo {
     float: right;
@@ -430,6 +476,174 @@
     page-break-after: avoid;
   }
   .project-tech { break-before: avoid; page-break-before: avoid; }
+
+  /* === v8 "Modern" overrides (picked by Paul, 2026-10-11) ===
+     Fresher single-column look on top of the warnick house style: tracked
+     uppercase headings with a hairline, a promotion rail tying the Ford roles
+     together, non-italic dates, Education mirroring the Experience pattern,
+     bold-labeled skills lines. Header (Option A) is untouched apart from the
+     symmetric side margins and a 13.5px contact line. Everything here is
+     CSS-only: nothing is added to the PDF text layer. */
+
+  /* Symmetric side margins (0.42in each) with a 2px print guard replace the
+     old 0.35in left / 0.53in right split, so the header is truly centered and
+     the text width stays the same (no rewraps). */
+  :root { --page-margin: 0.35in 0.42in; }
+  @media print { .page { padding: 0 2px; } }
+
+  /* Ragged-right body text: even word spacing, no hyphenation. */
+  .summary-text, .job li, .skill-item { text-align: left; text-justify: auto; }
+
+  /* Gap ladder, largest to smallest: section (13px) > employer (12px) >
+     role (11px = 3px bullet margin + 8px rail padding) > title-to-bullets
+     (4px). The brief's 10px/8px left the employer gap at 8px (the last
+     bullet's 3px margin collapses into it), smaller than the 11px gap
+     between Ford roles, so "Internships" read as closer to Ford than the
+     Ford roles are to each other. Costs 13px of the ~20px spare. */
+  .section { margin-bottom: 13px; }
+
+  /* Tracked uppercase label + hairline that fills the rest of the line.
+     Color and weight inherit from the base rule (accent blue, 700). */
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 0;
+    padding-bottom: 0;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+  .section-title::after {
+    content: "";
+    flex: 1 1 auto;
+    height: 1px;
+    background: hsl(205 35% 80%);
+  }
+
+  .summary-text { margin-left: 0; line-height: 1.45; }
+
+  .job { margin-bottom: 12px; }
+  .job:last-child { margin-bottom: 0; }
+
+  .job-company {
+    font-size: 15px;
+    font-style: normal;
+    color: #555;
+    letter-spacing: 0.01em;
+    margin-bottom: 3px;
+  }
+
+  .job-group .job-role-block { margin: 0 0 6px 18px; }
+  .job-group .job-role-block:last-child { margin-bottom: 0; }
+
+  /* Promotion rail — Ford group only (the first .job-group right after the
+     Experience heading). Margin 4px + rail 2px + padding 12px = 18px, so
+     the Ford role titles line up with the internships role title.
+     NO position:relative here: Chromium paints positioned boxes in a later
+     layer, which moved all three Ford roles to the END of the PDF's raw text
+     stream (after Skills) — fatal for ATS reading order. */
+  .section-title + .job-group .job-role-block {
+    margin: 0 0 0 4px;
+    padding: 0 0 8px 12px;
+    border-left: 2px solid hsl(205 40% 86%);
+  }
+  .section-title + .job-group .job-role-block:last-child { padding-bottom: 0; }
+
+  /* Dots on the rail: hollow for earlier roles, filled for the current one.
+     An in-flow inline-block in front of the role title (so text order is
+     untouched), pulled 18px left onto the rail and given back with an 8px
+     right margin so the title doesn't move. content-box: 6px interior + 2px
+     ring = 10px, centered on the 2px rail (the global border-box reset
+     would shrink it to 6px). Baseline-aligned, its 10px height matches the
+     title's cap height, so it sits centered on the capitals. */
+  .section-title + .job-group .job-role::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    box-sizing: content-box;
+    margin: 0 8px 0 -18px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--accent-color);
+  }
+  .section-title + .job-group .job-company + .job-role-block .job-role::before {
+    background: var(--accent-color);
+  }
+
+  .job-role { color: #2b2b2b; }
+
+  .job-period {
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .job-header { margin-bottom: 2px; }
+  .job ul { padding-left: 16px; margin-top: 2px; }
+
+  .job li { line-height: 1.35; margin-bottom: 3px; }
+  .job li::marker { color: var(--accent-color); }
+
+  /* Education mirrors Experience: institution first in the employer style,
+     degree indented like a role title, date right-aligned. (The institution
+     line is moved ahead of the degree in the markup by a post-build step.) */
+  .edu-item { margin-bottom: 0; }
+  .edu-org-line {
+    font-size: 15px;
+    font-weight: 700;
+    font-style: normal;
+    color: #555;
+    margin: 0 0 3px;
+  }
+  .edu-header { margin-left: 18px; }
+  .edu-title { color: #2b2b2b; }
+  .edu-year { font-size: 13px; font-style: normal; font-weight: 500; }
+
+  /* Bold-labeled skills lines, flush left, no discs. */
+  .skills-grid { gap: 3px; padding-left: 0; }
+  .skill-item { display: block; list-style: none; line-height: 1.35; color: #333; }
+  .skill-category { color: #2b2b2b; }
+
+  .contact-row { font-size: 13.5px; }
+  /* --- Post-review fixes (2026-10-11) ---
+     1. Section labels outrank employer lines again: 14px -> 16px (the
+        verifier found the 14px uppercase labels read smaller than the 15px
+        bold employer lines). Space paid back from .section/.job gaps.
+     2. Text-layer pairing: a few px more air under the employer/institution
+        line and under each heading so pdftotext -layout keeps every date on
+        its own role/degree line and default mode no longer merges
+        "EDUCATION" with "McMaster University". */
+  .section-title { font-size: 16px; letter-spacing: 0.07em; margin-bottom: 8px; }
+  .section { margin-bottom: 10px; }
+  .job { margin-bottom: 10px; }
+  .job:last-child { margin-bottom: 0; }
+  .job-company { margin-bottom: 5px; }
+  .edu-org-line { margin: 0 0 5px; }
+  /* 3px above the first role/degree row under an employer or institution
+     line: found by testing; with less, pdftotext -layout paired the
+     internship and education dates with the line above them. */
+  .job-company + .job-role-block .job-header,
+  .edu-org-line + .edu-header { padding-top: 3px; }
+  /* Pays for the bigger headings so the page still fits: bullets back to
+     v6/v7's 1.3 line-height, summary 1.45 -> 1.4. */
+  .job li { line-height: 1.3; }
+  .summary-text { line-height: 1.4; }
+  /* Education institution-first WITHOUT a post-build step: the shared
+     sections/education.html partial emits degree then institution, so flex
+     "order" shows the institution first. Chromium paints (and so writes the
+     PDF text stream) in order-modified order, so the text layer reads
+     "McMaster University" before the degree too (checked with pdftotext
+     default, -raw and -layout). Replaces postprocess-v8.mjs; the padding rule
+     no longer needs the adjacent-sibling selector, which only matched after
+     the old markup swap. */
+  .edu-item { display: flex; flex-direction: column; }
+  .edu-org-line { order: -1; }
+  .edu-item .edu-header { padding-top: 3px; }
 </style>
 </head>
 <body>
