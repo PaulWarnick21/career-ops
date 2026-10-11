@@ -212,6 +212,46 @@ const ATS_PROVIDERS = [
 const LINKEDIN_CLOSED_MARKER = /No longer accepting applications/i;
 const LINKEDIN_APPLY_CONTROL = /public_jobs_apply-link-onsite|job-details-topcard-apply-modal/;
 
+// Since late September 2026 the guest endpoint often leaves the banner OUT of a
+// closed posting: the whole posting still renders (title, company, description),
+// but the top card's call-to-action slot — where a live posting has its Apply
+// button — is empty, just LinkedIn's `<!---->` placeholders. Signed-in viewers
+// still see "No longer accepting applications" on the same postings. Seen first on
+// Card Kingdom (2026-10-06) and Pearson (2026-10-09), both confirmed closed. A
+// 109-posting sample on 2026-10-09 split cleanly: 82 live, every one with an apply
+// button in the slot; 27 with an empty slot, 13 of them still bannered, 14 not. Of
+// the unbannered ones checked against the employer, Pearson (Oracle board),
+// Intelerad (SmartRecruiters), Amazon, NVIDIA and Autodesk were closed there too —
+// but Fidelity Canada's own Workday board still listed its job after the LinkedIn
+// post lost its Apply button. This verdict is about the LinkedIn post; callers that
+// act on it look for an open copy of the job first (web-liveness.mjs findOpenCopy).
+const LINKEDIN_CTA_SLOT = /<div\b[^>]*\bclass="[^"]*\btop-card-layout__cta-container\b[^"]*"[^>]*>([\s\S]*?)<\/div>/;
+const LINKEDIN_POSTING_TITLE = /<h[1-3]\b[^>]*\bclass="[^"]*\btop-card-layout__title\b[^"]*"[^>]*>\s*[^<\s][^<]*<\/h[1-3]>/;
+const LINKEDIN_DESCRIPTION = /\bclass="[^"]*\bdescription__text\b/;
+
+/**
+ * True when the top card's apply slot is present and holds nothing but comment
+ * placeholders. A slot that is missing altogether is NOT empty: that is an unknown
+ * page (an older layout, a partial render), not a closed one.
+ *
+ * @param {string} html
+ */
+function emptyApplySlot(html) {
+  const slot = html.match(LINKEDIN_CTA_SLOT);
+  return !!slot && slot[1].replace(/<!--[\s\S]*?-->/g, '').trim() === '';
+}
+
+/**
+ * True when the body is a whole posting — a titled top card plus the description —
+ * rather than an interstitial, a rate-limit page or a partial render, any of which
+ * could also be missing an apply button.
+ *
+ * @param {string} html
+ */
+function renderedPosting(html) {
+  return LINKEDIN_POSTING_TITLE.test(html) && LINKEDIN_DESCRIPTION.test(html);
+}
+
 /**
  * Decide liveness for one LinkedIn posting from its guest-endpoint HTML.
  * Pure + deterministic (no I/O), mirroring classifyLiveness in liveness-core.mjs.
@@ -220,6 +260,12 @@ const LINKEDIN_APPLY_CONTROL = /public_jobs_apply-link-onsite|job-details-topcar
  * anything. A body carrying the closed banner AND an apply control, or neither, is
  * a page we do not recognise — a layout change, a partial render, an interstitial —
  * and it returns `uncertain` rather than picking the likelier answer.
+ *
+ * One exception to "neither": LinkedIn's banner-less closed layout (see
+ * LINKEDIN_CTA_SLOT above). It still takes two independent signals — the posting
+ * rendered in full, AND the slot where the Apply button goes is present but empty —
+ * on top of there being no apply control anywhere in the body. A page missing the
+ * title, the description or the slot itself stays `uncertain`.
  *
  * The asymmetry is deliberate and is the whole reason for the two-signal rule, and
  * it is this module's CONSERVATIVE BY DESIGN rule applied to a body read rather than
@@ -246,6 +292,13 @@ export function classifyLinkedInPosting(html) {
       result: 'active',
       code: 'linkedin_apply_control',
       reason: 'LinkedIn shows an apply control and no closure banner (live)',
+    };
+  }
+  if (!closed && !apply && renderedPosting(html) && emptyApplySlot(html)) {
+    return {
+      result: 'expired',
+      code: 'linkedin_no_apply_button',
+      reason: 'LinkedIn shows the posting with no Apply button (the empty apply slot it now uses for "No longer accepting applications")',
     };
   }
   return {

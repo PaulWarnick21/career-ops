@@ -10,6 +10,8 @@
 //
 //   closed marker present + no apply control -> expired
 //   no closed marker      + apply control    -> active
+//   neither, on a whole posting whose apply
+//   slot is present but empty                -> expired (banner-less layout, 2026-09)
 //   anything else                            -> uncertain
 //
 // The asymmetry that matters: a false `expired` costs the user a real job they
@@ -36,6 +38,7 @@ function check(desc, condition, details = '') {
 
 const fixture = (name) => readFileSync(join(ROOT, 'tests', 'fixtures', `linkedin-guest-${name}.html`), 'utf-8');
 const CLOSED = fixture('closed');
+const CLOSED_NO_BANNER = fixture('closed-no-banner');
 const LIVE_ONSITE = fixture('live-onsite');
 const LIVE_MODAL = fixture('live-modal');
 
@@ -150,6 +153,56 @@ const API = `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${ID}`;
     classifyLinkedInPosting(null) === null && classifyLinkedInPosting(undefined) === null);
 }
 
+// -- 4b. the banner-less closed layout (late September 2026) -----------------
+// LinkedIn stopped putting the banner on many closed postings for signed-out
+// visitors: the posting renders in full, but the slot that holds the Apply button
+// is empty. Pearson's closed Software Engineering Manager (tracker #1431) read as
+// `uncertain` and reached a full evaluation and the Sorting Desk that way. The
+// empty slot only counts on a whole posting, so each piece is removed in turn
+// below and the verdict must fall back to `uncertain`.
+{
+  const v = classifyLinkedInPosting(CLOSED_NO_BANNER);
+  check('a whole posting with an empty apply slot and no banner is expired',
+    v?.result === 'expired', JSON.stringify(v));
+  check('and says so with its own code, distinct from the banner case',
+    v?.code === 'linkedin_no_apply_button', JSON.stringify(v));
+
+  const noSlot = CLOSED_NO_BANNER.replace(/<div class="top-card-layout__cta-container[\s\S]*?<\/div>/, '');
+  check('the same posting with NO apply slot at all is uncertain (unknown layout, not closed)',
+    noSlot !== CLOSED_NO_BANNER && classifyLinkedInPosting(noSlot)?.result === 'uncertain',
+    JSON.stringify(classifyLinkedInPosting(noSlot)));
+
+  const noTitle = CLOSED_NO_BANNER.replace(/<h2 class="top-card-layout__title[\s\S]*?<\/h2>/, '');
+  check('an empty apply slot without the posting title is uncertain (interstitial / partial render)',
+    noTitle !== CLOSED_NO_BANNER && classifyLinkedInPosting(noTitle)?.result === 'uncertain',
+    JSON.stringify(classifyLinkedInPosting(noTitle)));
+
+  const noDescription = CLOSED_NO_BANNER.replace(/<div class="description__text[\s\S]*<\/section>\s*<\/div>/, '');
+  check('an empty apply slot without the description is uncertain (partial render)',
+    noDescription !== CLOSED_NO_BANNER && classifyLinkedInPosting(noDescription)?.result === 'uncertain',
+    JSON.stringify(classifyLinkedInPosting(noDescription)));
+
+  // Something unrecognised in the slot is not "empty": it may be an apply control
+  // LinkedIn has renamed, so this must never read as closed.
+  const unknownControl = CLOSED_NO_BANNER.replace('<!---->', '<a class="top-card-layout__cta" href="https://example.com/apply">Apply now</a>');
+  check('an apply slot holding an unrecognised element is uncertain, never expired',
+    unknownControl !== CLOSED_NO_BANNER && classifyLinkedInPosting(unknownControl)?.result === 'uncertain',
+    JSON.stringify(classifyLinkedInPosting(unknownControl)));
+
+  // NEGATIVE CONTROL: a recognised apply control anywhere in the body is live,
+  // whatever the slot looks like.
+  const withApply = CLOSED_NO_BANNER.replace('</section>\n  </div>\n</section>',
+    '</section>\n  </div>\n  <button data-modal="job-details-topcard-apply-modal">Apply</button>\n</section>');
+  check('an apply control elsewhere in the body still reads as live',
+    withApply !== CLOSED_NO_BANNER && classifyLinkedInPosting(withApply)?.result === 'active',
+    JSON.stringify(classifyLinkedInPosting(withApply)));
+
+  const both = classifyLinkedInPosting(CLOSED_NO_BANNER.replace('<!---->',
+    '<figcaption class="closed-job__flavor--closed">No longer accepting applications</figcaption>'));
+  check('the banner inside an otherwise empty slot is still the banner case',
+    both?.result === 'expired' && both.code === 'linkedin_closed_marker', JSON.stringify(both));
+}
+
 // -- 5. the interpret step is wired to the classifier -------------------------
 // The classifier being right is worth nothing if the rung never calls it. This
 // runs the real interpret over a real Response, so the body read is exercised too.
@@ -162,6 +215,10 @@ const API = `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${ID}`;
   const live = await resolved.interpret(new Response(LIVE_MODAL, { status: 200 }), resolved.parts);
   check('and returns live for a live body, through the same path',
     live?.result === 'active', JSON.stringify(live));
+
+  const noBanner = await resolved.interpret(new Response(CLOSED_NO_BANNER, { status: 200 }), resolved.parts);
+  check('and returns expired for the banner-less closed layout, through the same path',
+    noBanner?.result === 'expired' && noBanner.code === 'linkedin_no_apply_button', JSON.stringify(noBanner));
 }
 
 // -- 6. end to end through checkLivenessViaApi --------------------------------
