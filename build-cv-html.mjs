@@ -604,6 +604,15 @@ function buildInterests(items) {
     .join(', ');
 }
 
+// Local addition (2026-10-12, not upstream): a skills item may mark a term as
+// [[term]] to render it as <span class="skill-kw">term</span>, so a template
+// can make tool and technology names stand out in the Skills rows. Runs on the
+// already-escaped text, so the term itself stays escaped; items without
+// markers render exactly as before.
+function markSkillTerms(html) {
+  return html.replace(/\[\[(.+?)\]\]/g, '<span class="skill-kw">$1</span>');
+}
+
 function buildSkills(categories, partial) {
   if (!Array.isArray(categories) || categories.length === 0) return '';
   if (!partial) {
@@ -613,7 +622,7 @@ function buildSkills(categories, partial) {
       const cat = c.category
         ? `<span class="skill-category">${escapeHtml(c.category)}:</span> `
         : '';
-      return `    <div class="skill-item">${cat}${escapeHtml(joinItems(c.items))}</div>`;
+      return `    <div class="skill-item">${cat}${markSkillTerms(escapeHtml(joinItems(c.items)))}</div>`;
     }).join('\n');
     return `<div class="skills-grid">\n${items}\n  </div>`;
   }
@@ -627,7 +636,7 @@ function buildSkills(categories, partial) {
     ]);
     return fillEntry(entryTemplate, blocks, {
       CATEGORY:    escapeHtml(c.category || ''),
-      ITEMS_TEXT:  escapeHtml(joinItems(c.items)),
+      ITEMS_TEXT:  markSkillTerms(escapeHtml(joinItems(c.items))),
     }, blockValues);
   }).join('\n');
   return `<div class="skills-grid">\n${items}\n  </div>`;

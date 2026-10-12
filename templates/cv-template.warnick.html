@@ -528,10 +528,12 @@
   .job { margin-bottom: 12px; }
   .job:last-child { margin-bottom: 0; }
 
+  /* v10 (2026-10-11, Paul): employer lines back to the original resume's
+     lighter grey (#808080), which he finds easier to read than #555. */
   .job-company {
     font-size: 15px;
-    font-style: normal;
-    color: #555;
+    font-style: italic; /* v12 (2026-10-11, Paul): italic again, like his original and the Education line */
+    color: #808080;
     letter-spacing: 0.01em;
     margin-bottom: 3px;
   }
@@ -589,20 +591,6 @@
   .job li { line-height: 1.35; margin-bottom: 3px; }
   .job li::marker { color: var(--accent-color); }
 
-  /* Education mirrors Experience: institution first in the employer style,
-     degree indented like a role title, date right-aligned. (The institution
-     line is moved ahead of the degree in the markup by a post-build step.) */
-  .edu-item { margin-bottom: 0; }
-  .edu-org-line {
-    font-size: 15px;
-    font-weight: 700;
-    font-style: normal;
-    color: #555;
-    margin: 0 0 3px;
-  }
-  .edu-header { margin-left: 18px; }
-  .edu-title { color: #2b2b2b; }
-  .edu-year { font-size: 13px; font-style: normal; font-weight: 500; }
 
   /* Bold-labeled skills lines, flush left, no discs. */
   .skills-grid { gap: 3px; padding-left: 0; }
@@ -623,27 +611,104 @@
   .job { margin-bottom: 10px; }
   .job:last-child { margin-bottom: 0; }
   .job-company { margin-bottom: 5px; }
-  .edu-org-line { margin: 0 0 5px; }
   /* 3px above the first role/degree row under an employer or institution
      line: found by testing; with less, pdftotext -layout paired the
      internship and education dates with the line above them. */
-  .job-company + .job-role-block .job-header,
-  .edu-org-line + .edu-header { padding-top: 3px; }
+  .job-company + .job-role-block .job-header { padding-top: 3px; }
   /* Pays for the bigger headings so the page still fits: bullets back to
      v6/v7's 1.3 line-height, summary 1.45 -> 1.4. */
   .job li { line-height: 1.3; }
   .summary-text { line-height: 1.4; }
-  /* Education institution-first WITHOUT a post-build step: the shared
-     sections/education.html partial emits degree then institution, so flex
-     "order" shows the institution first. Chromium paints (and so writes the
-     PDF text stream) in order-modified order, so the text layer reads
-     "McMaster University" before the degree too (checked with pdftotext
-     default, -raw and -layout). Replaces postprocess-v8.mjs; the padding rule
-     no longer needs the adjacent-sibling selector, which only matched after
-     the old markup swap. */
-  .edu-item { display: flex; flex-direction: column; }
-  .edu-org-line { order: -1; }
-  .edu-item .edu-header { padding-top: 3px; }
+  /* v10 (2026-10-11, Paul): Education back to his original resume's layout:
+     degree in bold with the full date range right-aligned in italic blue,
+     then "McMaster University" in grey italic underneath. These are the base
+     rules, restated only for margin: no gap after the single entry, to keep
+     the page within one page. */
+  .edu-item { margin-bottom: 0; }
+  .edu-org-line { margin-top: 8px; }
+
+  /* --- v12 'skills' fit (2026-10-11) ---
+     The internships are two separate entries again (Paul), which cost ~90px
+     on a page that was already full. Most of it comes from content (the
+     Delivery tools skills line is gone: JIRA moved into the Scrum bullet,
+     Jama and TestRail were already in Team Lead bullets; the hiring bullet
+     now fits one line). The rest is spacing, kept modest: font sizes, the
+     summary, the header and the Skills lines are untouched. */
+  /* Bullets 1.3 -> 1.26 line-height and 3px -> 2px apart. 1.26 (not 1.28 or
+     1.3) also keeps pdftotext's default mode from splitting a bullet's
+     second line into its own paragraph (found by testing). */
+  .job li { margin-bottom: 2px; line-height: 1.26; }
+  /* Employer and role title lines: 1.5 (inherited from body) -> 1.3, the
+     same as the section headings. */
+  .job-company, .job-header, .job-role { line-height: 1.3; }
+  /* Gap ladder, largest to smallest: section (10px) > employer (9px) >
+     Ford role (2px bullet margin + 6px rail padding = 8px). Before this the
+     Ford roles sat further apart (11px) than the employers (10px). */
+  .section-title + .job-group .job-role-block { padding-bottom: 6px; }  /* was 8px */
+  .section-title + .job-group .job-role-block:last-child { padding-bottom: 0; }
+  .job { margin-bottom: 9px; }                                         /* was 10px */
+  .job:last-child { margin-bottom: 0; }
+  /* v12 polish (2026-10-11): internship titles and bullets line up with the
+     Ford roles (18px, same as the rail offset); a little vertical air
+     recovered from the Education line-height, the header and section gaps
+     (line-height 1.26 on bullets stays: at 1.3, pdftotext's default mode
+     split two bullets' second lines into their own paragraphs). */
+  .job:not(.job-group) .job-role,
+  .job:not(.job-group) .job-location,
+  .job:not(.job-group) > ul { margin-left: 18px; }
+  .edu-header, .edu-org-line { line-height: 1.3; }
+  .header { margin-bottom: 12px; }
+  .section { margin-bottom: 9px; }
+  /* v22 (2026-10-11, Paul): email is his preferred contact method and he
+     doesn't like phone calls, so email goes first and the phone last.
+     build-cv-html.mjs emits phone, email, LinkedIn, website in that fixed
+     order; flex 'order' moves them visually, and Chromium writes the PDF
+     text in the same visual order (checked with pdftotext). */
+  .contact-row .contact-email { order: -1; }
+  .contact-row .contact-phone { order: 10; }
+  /* v26 (2026-10-11): Paul's original bullets for his Senior Software
+     Developer and Software Developer roles came back (+3 lines), which left
+     the last Skills line on page 2. Spacing only, no font changes: section
+     gap 9->7px, employer gap 9->8px, header gap 12->10px, Ford rail role gap
+     6->4px, summary line-height 1.4->1.36. The summary change also keeps
+     pdftotext's default mode from merging the degree and the McMaster
+     University lines (it did with the gap changes alone). */
+  .section { margin-bottom: 7px; }
+  .job { margin-bottom: 8px; }
+  .job:last-child { margin-bottom: 0; }
+  .header { margin-bottom: 10px; }
+  .section-title + .job-group .job-role-block { padding-bottom: 4px; }
+  .section-title + .job-group .job-role-block:last-child { padding-bottom: 0; }
+  .summary-text { line-height: 1.36; }
+  /* v27 (2026-10-11, Paul): one body-text size. Resume guides put body text
+     at about 10-12pt and want the summary and the bullets in the same size.
+     The summary was 14.5px (10.9pt) against 13.5px (10.1pt) bullets and
+     skills, so it read larger. Now summary, bullets, skills and contact line
+     are all 13.5px (10.1pt), and the dates went from 13px (9.75pt) to 13.5px
+     so nothing on the page is under 10pt. Headings stay larger on purpose. */
+  .summary-text { font-size: 13.5px; line-height: 1.4; }
+  .job-period, .edu-year { font-size: 13.5px; }
+  /* v29 "five" (2026-10-11): Skills go from 3 to 5 labelled lines (Paul's
+     original four lines, all content kept, plus the skills added since:
+     People leadership / Team organization / Front end / Back end / AI
+     tools), which costs two lines (~42px) on a page that had ~15px spare.
+     Paid for with spacing only, no font changes and no other section's
+     wording: top and bottom page margins 0.35in -> 0.30in (side margins
+     unchanged, so nothing rewraps), bullets 2px -> 1.5px apart, Skills
+     lines 1.35 -> 1.3 line-height and 3px -> 2px apart, section gap
+     7px -> 6px, heading-to-content gap 8px -> 7px. */
+  :root { --page-margin: 0.30in 0.42in; }
+  .job li { margin-bottom: 1.5px; }
+  .skills-grid { gap: 2px; }
+  .skill-item { line-height: 1.3; }
+  .section { margin-bottom: 6px; }
+  .section-title { margin-bottom: 7px; }
+  /* v39 (2026-10-12, Paul): skill keywords stand out without bold. Tool,
+     technology and named-method terms marked [[...]] in the payload render as
+     .skill-kw: the page's accent blue at Medium 500, the same treatment the
+     dates already use, so labels (bold 700, near-black) stay the row heads.
+     Chosen after a 6-option review (research + critic, 2026-10-12). */
+  .skill-kw { color: var(--accent-color); font-weight: 500; }
 </style>
 </head>
 <body>
