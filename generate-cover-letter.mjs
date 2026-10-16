@@ -15,7 +15,7 @@
  */
 
 import { readFileSync, existsSync, mkdirSync } from "fs";
-import { dirname, resolve, join, relative, isAbsolute } from "path";
+import { dirname, resolve, join, relative, isAbsolute, extname } from "path";
 import { fileURLToPath } from "url";
 import { parseArgs } from "util";
 import { assertFacts } from "./verify-cv-facts.mjs";
@@ -129,6 +129,104 @@ function buildDateline(letter) {
   return parts.join(" &nbsp;&nbsp; ");
 }
 
+// --- Resume-matched letter tokens (local addition, 2026-10-16) -------------
+// Optional tokens for a cover-letter template that reuses the CV's look
+// (templates/cover-letter-template.warnick.html): a two-tone name, the CV's
+// icon contact row, embedded custom fonts, and a long-form date. The base
+// template uses none of them, so its output is unchanged.
+
+const FONT_TYPES = {
+  ".ttf": ["font/ttf", "truetype"],
+  ".otf": ["font/otf", "opentype"],
+  ".woff": ["font/woff", "woff"],
+  ".woff2": ["font/woff2", "woff2"],
+};
+
+/** @font-face rules with the font bytes inlined, from payload.custom_fonts. */
+export function buildCustomFonts(fonts) {
+  if (!Array.isArray(fonts)) return "";
+  const rules = [];
+  for (const f of fonts) {
+    if (!f || typeof f.family !== "string" || typeof f.path !== "string") continue;
+    const type = FONT_TYPES[extname(f.path).toLowerCase()];
+    if (!type) {
+      console.error(`custom_fonts: unsupported font format for ${f.path}, skipping`);
+      continue;
+    }
+    let bytes;
+    try {
+      bytes = readFileSync(resolve(f.path));
+    } catch (err) {
+      console.error(`custom_fonts: could not read ${f.path} (${err.code || err.message}), skipping`);
+      continue;
+    }
+    const weight = Number.isFinite(Number(f.weight)) ? Number(f.weight) : 400;
+    const style = f.style === "italic" ? "italic" : "normal";
+    const family = f.family.replace(/["\\<>]/g, "");
+    rules.push(`@font-face { font-family: "${family}"; font-weight: ${weight}; font-style: ${style}; src: url(data:${type[0]};base64,${bytes.toString("base64")}) format("${type[1]}"); }`);
+  }
+  return rules.join("\n");
+}
+
+/** First and last name for a two-tone header (explicit fields win). */
+function splitName(candidate) {
+  const parts = String(candidate.name || "").trim().split(/\s+/);
+  return {
+    first: candidate.first_name || parts[0] || "",
+    last: candidate.last_name || parts.slice(1).join(" "),
+  };
+}
+
+/** A profile URL's display form: no scheme, no "www.", no trailing slash. */
+function displayUrl(value) {
+  return String(value).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "");
+}
+
+/**
+ * The CV-style contact row: one element per item, each with a class the
+ * template can give an icon, in the CV's order (email, LinkedIn, website,
+ * location, phone) and with no separator text.
+ */
+export function buildContactItems(candidate) {
+  const items = [];
+  if (candidate.email) {
+    const email = escapeHtml(candidate.email);
+    items.push(`<a class="contact-email" href="mailto:${email}">${email}</a>`);
+  }
+  if (candidate.linkedin) {
+    items.push(`<a class="contact-linkedin" href="${escapeHtml(asUrl(candidate.linkedin))}">${escapeHtml(displayUrl(candidate.linkedin))}</a>`);
+  }
+  if (candidate.github) {
+    items.push(`<a class="contact-github" href="${escapeHtml(asUrl(candidate.github))}">${escapeHtml(displayUrl(candidate.github))}</a>`);
+  }
+  if (candidate.website) {
+    items.push(`<a class="contact-portfolio" href="${escapeHtml(asUrl(candidate.website))}">${escapeHtml(displayUrl(candidate.website))}</a>`);
+  }
+  if (candidate.location) {
+    items.push(`<span class="contact-location">${escapeHtml(candidate.location)}</span>`);
+  }
+  if (candidate.phone) {
+    const tel = String(candidate.phone).replace(/[^\d+]/g, "");
+    items.push(`<a class="contact-phone" href="tel:${escapeHtml(tel)}">${escapeHtml(candidate.phone)}</a>`);
+  }
+  return items.join("\n      ");
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"];
+
+/** "2026-10-16" -> "October 16, 2026"; anything else is shown as given. */
+export function formatLongDate(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return escapeHtml(value || "");
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+}
+
+/** "Company · City" for the letter's meta line, skipping empty parts. */
+function buildCompanyCity(letter) {
+  return [letter.company, letter.city].filter(Boolean).map(escapeHtml).join(" · ");
+}
+
 /** Build the optional achievements list for the letter body. */
 function buildAchievementsBlock(achievements) {
   if (!achievements || !achievements.length) return "";
@@ -235,6 +333,13 @@ export function buildHtml(payload, templatePath) {
     "{{LANGUAGE_CLOSING_BLOCK}}": languageClosingBlock,
     "{{SIGNATURE_BLOCK}}": signatureBlock,
     "{{FOOTNOTES_BLOCK}}": buildFootnotesBlock(letter.footnotes),
+    // Resume-matched template tokens (local addition, 2026-10-16).
+    "{{NAME_FIRST}}": escapeHtml(splitName(candidate).first),
+    "{{NAME_LAST}}": escapeHtml(splitName(candidate).last),
+    "{{CONTACT_ITEMS}}": buildContactItems(candidate),
+    "{{COMPANY_CITY}}": buildCompanyCity(letter),
+    "{{DATE_LONG}}": formatLongDate(letter.date),
+    "{{CUSTOM_FONTS}}": buildCustomFonts(payload.custom_fonts),
   };
 
   // Single-pass substitution: each {{TOKEN}} is replaced exactly once against
