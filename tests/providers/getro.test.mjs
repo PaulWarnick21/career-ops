@@ -278,6 +278,42 @@ try {
   const getroEmpty = await getro.fetch(okEntry, { fetchJson: async () => ({}) });
   if (Array.isArray(getroEmpty) && getroEmpty.length === 0) pass('getro.fetch() tolerates an empty payload');
   else fail(`getro.fetch() empty handling: ${JSON.stringify(getroEmpty)}`);
+
+  // remote.com/jobs is a job board Getro scrapes as portfolio company
+  // "Remote"'s career page, so every listing arrives as organization
+  // "Remote". The employer comes from the URL slug instead (2026-10-13:
+  // Canonical/Heard/CaptivateIQ all read "Remote" and dedup paired them).
+  const { employerFromJobBoardUrl } = await import(pathToFileURL(join(ROOT, 'providers/getro.mjs')).href);
+  const remoteSlugCases = [
+    ['https://remote.com/jobs/canonical-c11tjiq0/engineering-manager-data-platform-j1ab8pp1', 'Remote', 'Canonical'],
+    ['https://remote.com/jobs/heard-c1esd0di/engineering-manager-j19bjsfc', 'Remote', 'Heard'],
+    ['https://www.remote.com/jobs/captivateiq-c1bftmux/engineering-manager-sales-planning-j1dgl0b9', '', 'Captivateiq'],
+    ['https://remote.com/jobs/acme-capital-c1abcdef/eng-j1zzzzzz', 'Remote', 'Acme Capital'],
+    // Getro already named a different organization: its spelling wins.
+    ['https://remote.com/jobs/captivateiq-c1bftmux/em-j1dgl0b9', 'CaptivateIQ', null],
+    // Not a remote.com listing, or no id-suffixed employer segment.
+    ['https://jobs.examplevc.example/canonical-c11tjiq0/x', 'Remote', null],
+    ['https://remote.com/jobs', 'Remote', null],
+    ['https://remote.com/jobs/acme-capital/eng', 'Remote', null],
+    ['not a url', 'Remote', null],
+  ];
+  const badSlug = remoteSlugCases.filter(([url, org, want]) => employerFromJobBoardUrl(url, org) !== want);
+  if (badSlug.length === 0) pass('employerFromJobBoardUrl() reads the employer from a remote.com/jobs slug, minus its id suffix');
+  else fail(`employerFromJobBoardUrl() mismatches: ${JSON.stringify(badSlug.map(([u, o, w]) => [u, o, w, employerFromJobBoardUrl(u, o)]))}`);
+
+  const getroRemoteBoard = await getro.fetch(okEntry, {
+    fetchJson: async () => ({ results: { count: 3, jobs: [
+      { title: 'Engineering Manager - Data Platform', url: 'https://remote.com/jobs/canonical-c11tjiq0/engineering-manager-data-platform-j1ab8pp1', organization: { name: 'Remote', slug: 'remote' } },
+      { title: 'Engineering Manager', url: 'https://remote.com/jobs/heard-c1esd0di/engineering-manager-j19bjsfc', organization: { name: 'Remote', slug: 'remote' } },
+      { title: 'Head of People', url: 'https://remote.com/careers/head-of-people', organization: { name: 'Remote', slug: 'remote' } },
+    ] } }),
+  });
+  const remoteCompanies = getroRemoteBoard.map((r) => r.company);
+  if (JSON.stringify(remoteCompanies) === JSON.stringify(['Canonical', 'Heard', 'Remote'])) {
+    pass('getro.fetch() credits remote.com/jobs listings to the real employer, not the "Remote" organization');
+  } else {
+    fail(`getro.fetch() remote.com employer: ${JSON.stringify(remoteCompanies)}`);
+  }
 } catch (e) {
   fail(`getro provider tests crashed: ${e.message}`);
 }

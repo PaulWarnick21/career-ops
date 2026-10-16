@@ -179,6 +179,51 @@ function getroSalary(job) {
   return { min: min ?? max, max: max ?? min, currency };
 }
 
+// Getro credits every listing to the organization whose career page it
+// scraped. Some portfolio companies' "career page" is really a public job
+// board of OTHER employers' roles — Remote (remote.com) is on General
+// Catalyst's board, and Getro files everything on remote.com/jobs under
+// organization "Remote" (seen 2026-10-13: Canonical, Heard and CaptivateIQ
+// roles all read company "Remote", so dedup paired unrelated jobs and missed
+// a real duplicate). The API record carries no other employer field; the real
+// employer is the URL's `{employer-slug}-{id}` path segment.
+const JOB_BOARD_EMPLOYER_URLS = [
+  // https://remote.com/jobs/canonical-c11tjiq0/engineering-manager-...-j1odr71v
+  // The id is "c" + 7 base-36 chars; requiring a digit keeps a slug that
+  // merely ends in a c-word ("acme-capital") from being cut short.
+  { host: 'remote.com', boardOrg: 'remote', re: /^\/jobs\/([a-z0-9-]+?)-c(?=[a-z0-9]*\d)[a-z0-9]{5,}(?:\/|$)/i },
+];
+
+/**
+ * The real employer for a listing Getro filed under a job board's own
+ * organization, read from the listing URL — or null when the URL isn't one
+ * of those boards, or Getro already named a different organization (its
+ * own spelling, e.g. "CaptivateIQ", beats a title-cased slug).
+ * Exported for unit tests.
+ *
+ * @param {string} url
+ * @param {string} [orgName]
+ * @returns {string | null}
+ */
+export function employerFromJobBoardUrl(url, orgName = '') {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  for (const board of JOB_BOARD_EMPLOYER_URLS) {
+    if (host !== board.host) continue;
+    const org = String(orgName || '').trim().toLowerCase();
+    if (org && org !== board.boardOrg) return null;
+    const m = parsed.pathname.match(board.re);
+    if (!m) return null;
+    return m[1].split('-').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+  }
+  return null;
+}
+
 /** All known locations joined (not just the first), plus a "Remote" tag when work_mode says so. */
 function locationString(job) {
   const fromArray = (arr) => (Array.isArray(arr) ? arr.filter((l) => typeof l === 'string' && l.trim()).map((l) => l.trim()) : []);
@@ -277,12 +322,15 @@ export default {
           reachedOld = true;
           continue;
         }
+        const orgName = j.organization?.name || j.organization_name || '';
         const row = {
           title: j.title || '',
           url,
           // Portfolio jobs belong to the portfolio company, not the fund —
           // expose the real employer so dedup and the tracker read correctly.
-          company: j.organization?.name || j.organization_name || entry.name,
+          // A job board posing as a portfolio company names the board, so its
+          // listings take the employer from the URL instead.
+          company: employerFromJobBoardUrl(url, orgName) || orgName || entry.name,
           location: locationString(j),
           postedAt: createdMs,
         };
