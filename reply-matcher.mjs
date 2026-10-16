@@ -59,9 +59,94 @@ const NO_WORD_SEPARATOR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Kataka
 // of a word, not the end of one. This has to agree with LATIN_WORD_RE: a needle
 // allowed to CONTAIN marks needs boundaries that treat marks as word material,
 // or the two halves of the rule disagree about where a word ends.
+function wordBoundaryRe(needle, flags) {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escaped}(?![\\p{L}\\p{M}\\p{N}])`, flags);
+}
+
 function matchesOnWordBoundary(text, company) {
-  const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${escaped}(?![\\p{L}\\p{M}\\p{N}])`, 'iu').test(text);
+  return wordBoundaryRe(company, 'iu').test(text);
+}
+
+// LOCAL PATCH (career-ops fork, not upstream) — a hit must be WRITTEN like a
+// name. 2026-10-15: a Trulioo rejection ("...not move you ahead in the
+// interview process") matched the tracked company AHEAD, because every check
+// below this ignored case and the ordinary word "ahead" is the name in
+// lowercase. The same holds for Notion, Compass, Runway, Cadence, Clutch, and
+// for the lowercase ATS slugs scans store as company names (target, connect,
+// owner). An employer writes its own name capitalized, so for a single-word
+// name that has case, a hit counts when:
+//   - it sits inside an address (no-reply@ahead.com, jobs.lever.co/notion, a
+//     bare ahead.com), where lowercase is just how it's written; or
+//   - it carries a capital ("Notion", "ACME", "GitHub" for Github) — lowercase
+//     prose ("a notion", "encompass", "move you ahead") never counts; and
+//   - it doesn't read as a capitalized ORDINARY word opening a sentence:
+//     a sentence break before it and a lowercase word after it ("Ahead of
+//     your interview", "Current openings"). An all-caps hit of an all-caps
+//     name ("AHEAD is hiring") is exempt — that is the name as styled.
+// Title case still counts for an all-caps name: BJAK's own mail is signed
+// "Bjak Talent Acquisition Team". Names with no case at all (Chinese,
+// Japanese, digits) keep the old paths, and so do multi-word names: "acme
+// corp" in lowercase is still Acme Corp, never an ordinary word (upstream's
+// own test asserts it), and every false hit seen was a single word.
+const ADDRESS_STOP_RE = /[\s<>"'()[\]{}]/;
+const ADDRESS_TOKEN_RE = /@|:\/\/|^www\./i;
+const HOST_TOKEN_RE = /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:[/:?#]\S*)?$/;
+
+function isInAddress(text, start, end) {
+  let from = start;
+  while (from > 0 && !ADDRESS_STOP_RE.test(text[from - 1])) from--;
+  let to = end;
+  while (to < text.length && !ADDRESS_STOP_RE.test(text[to])) to++;
+  const token = text.slice(from, to);
+  return ADDRESS_TOKEN_RE.test(token) || HOST_TOKEN_RE.test(token);
+}
+
+function isCaseSensitiveName(company) {
+  return company.toLowerCase() !== company.toUpperCase()
+    && !/[\p{L}\p{N}]\s+[\p{L}\p{N}]/u.test(company);
+}
+
+// "Opening a sentence" means a real break before the hit — text start, a line
+// break, terminal punctuation, an HTML tag — not any punctuation: Red Ventures
+// writes "Engineering Manager | Bankrate position", and that names Bankrate.
+function opensSentenceAsWord(text, start, end) {
+  let before = start - 1;
+  while (before >= 0 && /[^\S\r\n]/.test(text[before])) before--;
+  let after = end;
+  while (after < text.length && /\s/.test(text[after])) after++;
+  return (before < 0 || /[\r\n.!?:>"“‘(]/.test(text[before])) && /\p{Ll}/u.test(text[after] || '');
+}
+
+function hitNamesCompany(text, start, end, company) {
+  if (isInAddress(text, start, end)) return true;
+  const hit = text.slice(start, end);
+  if (hit === hit.toLowerCase()) return false;
+  if (company === company.toUpperCase() && hit === hit.toUpperCase()) return true;
+  return !opensSentenceAsWord(text, start, end);
+}
+
+// Every place `needle` (lowercase, whitespace-free — normalizeStr's form)
+// occurs in `text` ignoring case and whitespace, as [start, end) offsets into
+// the ORIGINAL text, so the hit can be read back as written. Folded one code
+// point at a time because toLowerCase() can lengthen a character ("İ").
+function looseHits(text, needle) {
+  let folded = '';
+  const origin = [];
+  let i = 0;
+  for (const ch of text) {
+    if (!/\s/.test(ch)) {
+      const lower = ch.toLowerCase();
+      folded += lower;
+      for (let k = 0; k < lower.length; k++) origin.push([i, i + ch.length]);
+    }
+    i += ch.length;
+  }
+  const hits = [];
+  for (let p = folded.indexOf(needle); p !== -1; p = folded.indexOf(needle, p + 1)) {
+    hits.push([origin[p][0], origin[p + needle.length - 1][1]]);
+  }
+  return hits;
 }
 
 export function checkCompanyMatch(text, company) {
@@ -76,7 +161,22 @@ export function checkCompanyMatch(text, company) {
   const alphanumeric = company.replace(/[^\p{L}\p{N}]/gu, '');
   const isShortName = Array.from(alphanumeric).length <= SHORT_NAME_MAX;
   if (isShortName && !NO_WORD_SEPARATOR_RE.test(company)) {
-    return matchesOnWordBoundary(text, company);
+    if (!isCaseSensitiveName(company)) return matchesOnWordBoundary(text, company);
+    return Array.from(text.matchAll(wordBoundaryRe(company, 'giu')))
+      .some((m) => hitNamesCompany(text, m.index, m.index + m[0].length, company));
+  }
+
+  // Single-word cased names: the exact, lowercase and spacing-insensitive
+  // checks below collapse into one hit search (see "a hit must be WRITTEN like
+  // a name"). The normalized pre-check keeps the no-hit case as cheap as before.
+  if (isCaseSensitiveName(company)) {
+    const cNorm = normalizeStr(company);
+    if (normalizeStr(text).includes(cNorm)
+      && looseHits(text, cNorm).some(([start, end]) => hitNamesCompany(text, start, end, company))) return true;
+    // A cased name that also carries Chinese/Japanese keeps the suffix path.
+    if (!NO_WORD_SEPARATOR_RE.test(company)) return false;
+    const cChi = normalizeChinese(company);
+    return Boolean(cChi && cChi.length >= 2 && text.includes(cChi));
   }
 
   // Exact substring

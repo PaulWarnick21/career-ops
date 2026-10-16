@@ -147,6 +147,73 @@ try {
   } else {
     fail(`real match regressed: ${JSON.stringify(realMatch)}`);
   }
+
+  // ── 4. A company name that is also an ordinary word (LOCAL PATCH) ──
+  // 2026-10-15: a Trulioo rejection surfaced as "#1529 AHEAD → Rejected"
+  // because its body says "...not move you ahead in the interview process".
+  // A hit names the company only when written like a name: capitalized, not a
+  // capitalized ordinary word opening a sentence, or inside an address.
+  check('"AHEAD" does not match the word "ahead"',
+    checkCompanyMatch('we have unfortunately made the decision to not move you ahead in the interview process', 'AHEAD'), false);
+  check('"AHEAD" does not match "Ahead" opening a sentence',
+    checkCompanyMatch('Thanks for confirming.\nAhead of your interview, please review the agenda.', 'AHEAD'), false);
+  check('"AHEAD" matches when written in caps',
+    checkCompanyMatch('Thank you for your interest in AHEAD.', 'AHEAD'), true);
+  check('"AHEAD" matches in a sender address',
+    checkCompanyMatch('Recruiting <no-reply@ahead.com> Your application', 'AHEAD'), true);
+  // An all-caps name written in Title case still counts — BJAK's own mail.
+  check('"BJAK" matches "Bjak Talent Acquisition Team"',
+    checkCompanyMatch('Bjak Talent Acquisition Team <no-reply@ashbyhq.com> We’ve Received Your Application', 'BJAK'), true);
+  check('a mixed-case name does not match its lowercase word',
+    checkCompanyMatch('Despite being an AI company, rest assured that every application is read', 'Assured'), false);
+  check('...nor a longer lowercase word containing it',
+    checkCompanyMatch('a role encompassing platform and infrastructure work', 'Compass'), false);
+  check('...but matches when capitalized mid-sentence',
+    checkCompanyMatch('Thank you for applying to Notion! We will be in touch.', 'Notion'), true);
+  check('...and inside a job-board URL',
+    checkCompanyMatch('View it at https://jobs.lever.co/notion/123', 'Notion'), true);
+  // "|" is not a sentence break: Red Ventures' own subject line.
+  check('a name after "|" still counts',
+    checkCompanyMatch('Thanks for applying to our Engineering Manager | Bankrate position.', 'Bankrate'), true);
+  check('a lowercase ATS-slug name does not match HTML attributes',
+    checkCompanyMatch('<a target="_blank" href="https://example.com">Apply</a>', 'target'), false);
+  check('...but matches the capitalized name',
+    checkCompanyMatch('Thank you for applying to Target.', 'target'), true);
+  check('a short name does not match its lowercase word',
+    checkCompanyMatch('This closes the skills gap on the team', 'Gap'), false);
+  check('...but still matches as a name',
+    checkCompanyMatch('Thank you for applying to Gap Inc.', 'Gap'), true);
+
+  // End to end, with the email's real shape. Trulioo's own row (#840) is
+  // already Rejected, so only active rows are in play — AHEAD among them.
+  const activeApps = [
+    { num: 1529, company: 'AHEAD', role: 'Manager of Software Engineering', notes: '' },
+    { num: 1195, company: 'GEICO', role: 'Engineering Manager', notes: '' },
+  ];
+  const trulioo = matchCandidates([{
+    message_id: 'gmail-1a1174a4a8972ad3',
+    from: 'Trulioo Hiring Team <no-reply@ashbyhq.com>',
+    subject: 'Update - Manager, Engineering at Trulioo - Paul Warnick',
+    body_snippet: 'Hi Paul,\r\n\r\nThank you for applying for the Manager, Engineering position at Trulioo! '
+      + 'We received a large number of applications for this position and after reviewing your profile, '
+      + 'we have unfortunately made the decision to not move you ahead in the interview process at this time.'
+      + '\r\n\r\nThank you again for your interest in Trulioo.\r\n\r\nTeam Trulioo',
+  }], activeApps, []);
+  const onAhead = trulioo.filter((m) => m.application_num === 1529);
+  if (onAhead.length === 0) pass('the Trulioo rejection no longer attaches to AHEAD');
+  else fail(`Trulioo rejection still attached to AHEAD: ${JSON.stringify(onAhead)}`);
+
+  const ahead = matchCandidates([{
+    message_id: 'm-ahead',
+    from: 'AHEAD Talent Acquisition <no-reply@ashbyhq.com>',
+    subject: 'Update - Manager of Software Engineering at AHEAD',
+    body_snippet: 'Thank you for your interest in AHEAD. We have decided not to move ahead with your application.',
+  }], activeApps, []);
+  if (ahead.length === 1 && ahead[0].application_num === 1529 && ahead[0].confidence === 'high') {
+    pass('a genuine AHEAD email still matches AHEAD with high confidence');
+  } else {
+    fail(`genuine AHEAD email regressed: ${JSON.stringify(ahead)}`);
+  }
 } catch (error) {
   fail(`reply-matcher tests could not run: ${error.message}`);
 }
