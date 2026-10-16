@@ -24,6 +24,13 @@
 // US-remote. Only 8 job ids appeared in both, and a market host carries that
 // market's remote inventory too, so it is not "onsite only".
 //
+// Canadian markets (added 2026-10-13): Built In also runs builtintoronto.com,
+// builtinvancouver.org, builtincalgary.org, builtinottawa.com and
+// builtinmontreal.com on the same platform. Only Vancouver is allowlisted so
+// far. Its canonical host is the BARE builtinvancouver.org (www 301s to bare,
+// the reverse of the US markets), and builtinvancouver.com is an unrelated
+// parked domain, so it is deliberately not accepted as a spelling.
+//
 // ── What we parse ────────────────────────────────────────────────────────
 // Two payloads on the SAME fetched page, joined on the numeric job id:
 //
@@ -109,6 +116,9 @@ const HOSTS = new Map([
   ['www.builtinchicago.org', 'www.builtinchicago.org'],
   ['builtincolorado.com', 'www.builtincolorado.com'],
   ['www.builtincolorado.com', 'www.builtincolorado.com'],
+  // Vancouver is .org and canonical WITHOUT www (www 301s to bare).
+  ['builtinvancouver.org', 'builtinvancouver.org'],
+  ['www.builtinvancouver.org', 'builtinvancouver.org'],
 ]);
 
 // Drift guard thresholds. Both are deliberately loose: the guard exists to

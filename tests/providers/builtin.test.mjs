@@ -226,6 +226,13 @@ try {
   } else {
     fail(`resolveHost(chicago) = ${resolveHost('builtinchicago.org')}`);
   }
+  if (resolveHost('builtinvancouver.org') === 'builtinvancouver.org'
+      && resolveHost('www.builtinvancouver.org') === 'builtinvancouver.org'
+      && resolveHost('builtinvancouver.com') === null) {
+    pass('resolveHost() knows Vancouver is .org and canonical without www (www 301s to bare); the .com is a parked domain');
+  } else {
+    fail(`resolveHost(vancouver) = ${resolveHost('builtinvancouver.org')} / ${resolveHost('www.builtinvancouver.org')} / ${resolveHost('builtinvancouver.com')}`);
+  }
   if (resolveHost('evil.com') === null && resolveHost('builtin.com.evil.com') === null
       && resolveHost('notbuiltin.com') === null && resolveHost(42) === null) {
     pass('resolveHost() rejects any host off the allowlist (SSRF guard)');
