@@ -69,6 +69,11 @@ const BOT_CHALLENGE_PATTERNS = [
   /\bray id\b/i,
   /\bcf-ray\b/i,
   /please complete the security check/i,
+  // careers.ibm.com (2026-10-21) answers a plain fetch with HTTP 202 and a
+  // 28-word "we need to verify that you're not a robot ... Enable JavaScript"
+  // page. Kept to the full phrase: a bare "not a robot" also appears in the
+  // reCAPTCHA label of live application forms.
+  /verify that you'?re not a robot/i,
 ];
 
 const EXPIRED_URL_PATTERNS = [

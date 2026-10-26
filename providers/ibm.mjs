@@ -17,6 +17,19 @@
 //
 // Omit `country` / `categories` to widen the search. Paginates via `from` until
 // the result set is exhausted or MAX_RECORDS is reached.
+//
+// `query` narrows to a keyword search (the ibm.com/careers/search box) over
+// title + the listing's short intro text, and `company` names the employer on
+// each job (default "IBM"). Together they scan a company IBM has acquired whose
+// jobs now live on IBM careers — Confluent's postings carry "Confluent" in the
+// title and "With Confluent, an IBM Company" in the intro:
+//
+//   - name: Confluent
+//     provider: ibm
+//     ibm:
+//       query: confluent
+//       company: Confluent
+//     enabled: true
 
 const API_URL = 'https://www-api.ibm.com/search/api/v2';
 const PAGE_SIZE = 30;
@@ -41,31 +54,63 @@ export function buildPostFilter(cfg) {
   return { bool: { must } };
 }
 
+/** The entry's keyword search term, trimmed and capped; '' when unset. */
+function keywordOf(cfg) {
+  return typeof cfg.query === 'string' ? cfg.query.trim().slice(0, 200) : '';
+}
+
+/**
+ * Builds the Elasticsearch query from the entry's `ibm.query` keyword. The
+ * `body` field is deliberately not searched: unrelated IBM roles list
+ * "Confluent" / "Kafka" among their skills there, and would be stamped with
+ * the acquired company's name.
+ * @param {{ query?: string }} cfg
+ */
+export function buildQuery(cfg) {
+  const q = keywordOf(cfg);
+  if (!q) return { bool: { must: [] } };
+  return {
+    bool: {
+      must: [{ simple_query_string: { query: q, fields: ['title^2', 'description'], default_operator: 'and' } }],
+    },
+  };
+}
+
 /**
  * Normalizes one page of the IBM careers API response into job entries.
  * Throws if the response doesn't carry the expected `hits.hits[]` shape, so a
  * silent endpoint change surfaces as a hard error instead of empty results.
  * @param {any} json - A single API response page.
+ * @param {string} [company] - Employer name stamped on each job.
  * @returns {Array<{title: string, url: string, company: string, location: string}>}
  */
-export function parseIbmResponse(json) {
+export function parseIbmResponse(json, company = 'IBM') {
   const hits = json && json.hits && Array.isArray(json.hits.hits) ? json.hits.hits : null;
   if (!hits) {
     throw new Error(`ibm: unexpected API response — expected hits.hits[], got keys: [${json ? Object.keys(json).join(', ') : 'null'}]`);
   }
 
+  const str = (v) => (typeof v === 'string' ? v.trim() : '');
   const out = [];
   for (const h of hits) {
     const s = (h && h._source) || {};
     if (typeof s.title !== 'string' || s.title.trim() === '') continue;
     if (typeof s.url !== 'string' || !/^https?:\/\//i.test(s.url.trim())) continue;
-    const loc = typeof s.field_keyword_19 === 'string' ? s.field_keyword_19.trim() : '';
-    const mode = typeof s.field_keyword_17 === 'string' ? s.field_keyword_17.trim() : '';
+    let place = str(s.field_keyword_19);
+    const mode = str(s.field_keyword_17);
+    const country = str(s.field_keyword_05);
+    // A "Multiple Cities" posting names its cities in field_keyword_21.
+    const cities = /^multiple cities$/i.test(place) && Array.isArray(s.field_keyword_21)
+      ? s.field_keyword_21.map(str).filter(Boolean)
+      : [];
+    if (cities.length) place = `Multiple Cities (${cities.slice(0, 8).join('; ')}${cities.length > 8 ? '; …' : ''})`;
+    // Without the country, "Multiple Cities · Remote" says nothing about where.
+    if (country && !place.toLowerCase().includes(country.toLowerCase())) place = place ? `${place}, ${country}` : country;
     out.push({
       title: s.title.trim(),
       url: s.url.trim(),
-      company: 'IBM',
-      location: [loc, mode].filter(Boolean).join(' · '),
+      company,
+      location: [place, mode].filter(Boolean).join(' · '),
     });
   }
   return out;
@@ -77,12 +122,15 @@ export default {
 
   /**
    * Fetches and normalizes postings from IBM's careers search API.
-   * @param {{ name?: string, ibm?: { country?: string, categories?: string[] } }} entry
+   * @param {{ name?: string, ibm?: { country?: string, categories?: string[], query?: string, company?: string } }} entry
    * @param {{ fetchJson: (url: string, opts?: object) => Promise<any> }} ctx
    * @returns {Promise<Array<{title: string, url: string, company: string, location: string}>>}
    */
   async fetch(entry, ctx) {
-    const postFilter = buildPostFilter(entry.ibm || {});
+    const cfg = entry.ibm || {};
+    const postFilter = buildPostFilter(cfg);
+    const query = buildQuery(cfg);
+    const company = typeof cfg.company === 'string' && cfg.company.trim() ? cfg.company.trim() : 'IBM';
     /** @type {Array<{title: string, url: string, company: string, location: string}>} */
     const out = [];
 
@@ -90,17 +138,17 @@ export default {
       const body = {
         appId: 'careers',
         scopes: ['careers2'],
-        query: { bool: { must: [] } },
+        query,
         post_filter: postFilter,
         size: PAGE_SIZE,
         from,
         sort: [{ _score: 'desc' }, { pageviews: 'desc' }],
         lang: 'zz',
         localeSelector: {},
-        sm: { query: '', lang: 'zz' },
+        sm: { query: keywordOf(cfg), lang: 'zz' },
         _source: ['_id', 'title', 'url', 'description', 'language',
           'field_keyword_05', 'field_keyword_08', 'field_keyword_17',
-          'field_keyword_18', 'field_keyword_19'],
+          'field_keyword_18', 'field_keyword_19', 'field_keyword_21'],
       };
 
       // redirect:'error' prevents SSRF via server-side redirects
@@ -111,7 +159,7 @@ export default {
         redirect: 'error',
       });
 
-      out.push(...parseIbmResponse(json));
+      out.push(...parseIbmResponse(json, company));
 
       // Stop on the first short page. IBM's `total` is unreliable (often
       // capped at the page size), so don't trust it for the loop bound —
