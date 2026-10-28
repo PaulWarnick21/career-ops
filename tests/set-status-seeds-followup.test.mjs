@@ -21,6 +21,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localToday } from '../lib/local-today.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -159,14 +160,14 @@ const daysBetween = (a, b) =>
 
 test('--on anchors the follow-up on the day the application was really sent', () => {
   // --on is the day the transition REALLY happened, and for a transition into
-  // Applied that is the day the application went out. Nothing else carries it:
-  // the tracker's date column is the EVALUATION date (2026-02-01 in the
-  // fixture) and set-status never rewrites it, so a dropped --on silently
-  // anchors the cadence on the wrong day.
+  // Applied that is the day the application went out. Without it, the
+  // transition is happening today — the day the status-log records — so the
+  // tracker's date column (the EVALUATION date, 2026-02-01 in the fixture,
+  // never rewritten by set-status) must not be the anchor either way.
   //
   // Asserted as a difference between two runs rather than against a hardcoded
-  // date, so the cadence length stays configurable: backdating the anchor by
-  // 27 days must move the first follow-up back by exactly 27 days.
+  // date, so the cadence length stays configurable: the gap between the two
+  // first follow-ups must equal the gap between 2026-01-05 and today.
   const withOn = sandbox();
   const withoutOn = sandbox();
   try {
@@ -175,9 +176,9 @@ test('--on anchors the follow-up on the day the application was really sent', ()
     const shift = daysBetween(anchored.followupSeeded.nextDate, unanchored.followupSeeded.nextDate);
     assert.equal(
       shift,
-      daysBetween('2026-01-05', '2026-02-01'),
-      `--on did not reach the seeder: it scheduled ${anchored.followupSeeded.nextDate} from a 2026-01-05 apply date, ` +
-      `the same as the ${unanchored.followupSeeded.nextDate} it picks off the evaluation-date column with no --on at all`,
+      daysBetween('2026-01-05', localToday()),
+      `--on or today did not reach the seeder: it scheduled ${anchored.followupSeeded.nextDate} from a 2026-01-05 apply date ` +
+      `and ${unanchored.followupSeeded.nextDate} with no --on (expected that one to be anchored on today, not the evaluation date)`,
     );
   } finally {
     for (const d of [withOn, withoutOn]) rmSync(d, { recursive: true, force: true, maxRetries: 10 });

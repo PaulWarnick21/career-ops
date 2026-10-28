@@ -19,8 +19,9 @@
  * always safe — it just appends a fresh pin.
  *
  * Apply-date resolution order (see resolveAppliedDate): explicit --date, then
- * "Applied YYYY-MM-DD" in the row's notes, then the tracker's `date` column,
- * then today. Every result carries an `appDateSource` saying which of those it
+ * "Applied YYYY-MM-DD" in the row's notes, then the transition date a caller
+ * recording the move into Applied passes (set-status.mjs), then the tracker's
+ * `date` column, then today. Every result carries an `appDateSource` saying which of those it
  * came from, so a measured date is never mistaken for a guessed one.
  *
  * The `date` column used to be excluded here as "the evaluation date, not the
@@ -164,12 +165,19 @@ export function isValidCalendarDate(str) {
  * throws rather than falling through: `parseDate` would return null for it and
  * the pin would be written with a literal "null" next-date.
  *
+ * A transition date (the day a caller recorded the move into Applied — the
+ * same day set-status.mjs writes to status-log.tsv) outranks the `date`
+ * column but not the notes. The column is the EVALUATION date, so for a row
+ * evaluated weeks ago and applied today it put the first follow-up in the
+ * past: due, and overdue, the moment it was pinned.
+ *
  * @param {{num?: number, notes?: string, date?: string}} row - Parsed tracker row.
  * @param {string|null|undefined} explicitDate - `--date` value, already validated.
- * @returns {{appliedDate: string, appDateSource: 'explicit'|'notes'|'evaluation-date'|'today'}}
+ * @param {string|null|undefined} [transitionDate] - Day the row moved into Applied, if the caller knows it.
+ * @returns {{appliedDate: string, appDateSource: 'explicit'|'notes'|'transition'|'evaluation-date'|'today'}}
  * @throws {SeedError} INVALID_DATE when the notes carry an impossible date.
  */
-export function resolveAppliedDate(row, explicitDate) {
+export function resolveAppliedDate(row, explicitDate, transitionDate) {
   if (explicitDate) return { appliedDate: explicitDate, appDateSource: 'explicit' };
   const notesDate = parseAppliedDate(row?.notes);
   if (notesDate) {
@@ -177,6 +185,9 @@ export function resolveAppliedDate(row, explicitDate) {
       throw new SeedError('INVALID_DATE', `Application #${row?.num ?? '?'} notes carry an impossible "Applied ${notesDate}" date; fix the notes or pass --date`);
     }
     return { appliedDate: notesDate, appDateSource: 'notes' };
+  }
+  if (isValidCalendarDate(String(transitionDate ?? ''))) {
+    return { appliedDate: transitionDate, appDateSource: 'transition' };
   }
   // Only a usable calendar date qualifies: a blank or malformed `date` cell
   // must not become a pin with a "null" next-date, which is the same failure
@@ -566,7 +577,7 @@ export async function seedFollowup(appNum, options = {}) {
   // appDateSource travels with the result so a caller can tell a measured apply
   // date from a proxy or a guess — the same contract followup-cadence.mjs and
   // company-history.mjs already expose.
-  const { appliedDate, appDateSource } = resolveAppliedDate(row, options.date);
+  const { appliedDate, appDateSource } = resolveAppliedDate(row, options.date, options.transitionDate);
   const cadence = resolveCadenceConfig({ profilePath: options.profilePath });
   const nextDate = addDays(parseDate(appliedDate), cadence.applied_first);
   const setDate = todayStr();

@@ -237,6 +237,17 @@ function cleanup(sandbox) {
   if (fallback.appliedDate === '2026-01-01' && fallback.appDateSource === 'evaluation-date') pass('4. resolveAppliedDate: falls back to the evaluation date, labelled');
   else fail(`4. resolveAppliedDate: falls back to the evaluation date — got ${JSON.stringify(fallback)}`);
 
+  // A transition date (set-status passes the day it logs the move into
+  // Applied) beats the evaluation-date column, but never an "Applied DATE"
+  // in the notes. A row evaluated 2026-01-01 and applied 2026-03-10 used to be
+  // pinned from January, so its first follow-up was overdue on arrival.
+  const fromTransition = mod.resolveAppliedDate(rowNoNotes, null, '2026-03-10');
+  if (fromTransition.appliedDate === '2026-03-10' && fromTransition.appDateSource === 'transition') pass('4. resolveAppliedDate: transition date beats the evaluation date, labelled');
+  else fail(`4. resolveAppliedDate: transition date beats the evaluation date — got ${JSON.stringify(fromTransition)}`);
+  const notesOverTransition = mod.resolveAppliedDate(rowWithNotes, null, '2026-03-10');
+  if (notesOverTransition.appliedDate === '2026-06-20' && notesOverTransition.appDateSource === 'notes') pass('4. resolveAppliedDate: notes still beat a transition date');
+  else fail(`4. resolveAppliedDate: notes still beat a transition date — got ${JSON.stringify(notesOverTransition)}`);
+
   // ...and today survives only as the last resort, when there is no usable
   // column date either. Still labelled, so it is never mistaken for measured.
   const rowNothing = { notes: 'no date here', date: '' };

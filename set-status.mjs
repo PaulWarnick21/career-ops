@@ -598,11 +598,17 @@ if (statusChanged && newStatus === 'Applied') {
       // --on is the day the transition REALLY happened, and for a transition
       // into Applied that day is the day the application was sent. Nothing
       // else carries it here: the tracker's date column is the evaluation
-      // date and this script never rewrites it, so without passing it on,
-      // seedFollowup falls back to that column or to today. Backdating a
-      // week-old application would then schedule its first follow-up a week
+      // date and this script never rewrites it. Backdating a week-old
+      // application without --on would schedule its first follow-up a week
       // late — from the wrong anchor, silently.
       date: flags.on,
+      // Without --on the transition is happening today, the same day the
+      // status-log line above records. Passed as the transition date rather
+      // than as `date`, so an "Applied YYYY-MM-DD" in the notes still wins.
+      // Before this, seedFollowup fell back to the evaluation-date column: a
+      // row evaluated in September and marked Applied in October got a first
+      // follow-up dated in September, overdue on arrival.
+      transitionDate: flags.on ?? localToday(),
       dryRun: flags.dryRun,
       // assumeApplied on a DRY RUN only, and deliberately not `force`.
       // seedFollowup refuses a row that is not Applied, and on a dry run the
