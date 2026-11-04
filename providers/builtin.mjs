@@ -119,6 +119,12 @@ const HOSTS = new Map([
   // Vancouver is .org and canonical WITHOUT www (www 301s to bare).
   ['builtinvancouver.org', 'builtinvancouver.org'],
   ['www.builtinvancouver.org', 'builtinvancouver.org'],
+  // Toronto and Ottawa (added 2026-10-30, when on-site / hybrid work in
+  // Ontario was approved): canonical WITHOUT www too (www 301s to bare).
+  ['builtintoronto.com', 'builtintoronto.com'],
+  ['www.builtintoronto.com', 'builtintoronto.com'],
+  ['builtinottawa.com', 'builtinottawa.com'],
+  ['www.builtinottawa.com', 'builtinottawa.com'],
 ]);
 
 // Drift guard thresholds. Both are deliberately loose: the guard exists to
