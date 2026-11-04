@@ -20,13 +20,16 @@ import { fetchJsonWithRetry, sleep } from './_http.mjs';
 //        provider: himalayas
 //        himalayas:
 //          queries: ["engineering manager", "engineering team lead"]
-//          country: CA        # optional; ISO alpha-2 or a country name
+//          country: CA        # optional; ISO alpha-2 or a country name, or a list
 //          max_pages: 10      # optional; pages per query, 20 rows a page
+//          delay_ms: 1200     # optional; pause between requests (default 250, never lower)
 //
 //    `country` makes the API return only postings a resident of that country
 //    is eligible for: roles whose locationRestrictions include it, plus
 //    unrestricted (worldwide) ones. Either `queries` or `country` is required;
-//    a country with no queries sweeps every eligible posting.
+//    a country with no queries sweeps every eligible posting. A list
+//    (`country: [GB, DE]`) sweeps every query once per country, one country
+//    after another; the API takes one country per request.
 //
 //    Measured 2026-09-24: q=engineering manager&country=CA -> totalCount 354,
 //    against the 20 rows the browse feed returns. The search pages with a
@@ -50,6 +53,12 @@ const DEFAULT_MAX_PAGES = 10;
 const MAX_PAGES_CAP = 50;
 /** Pause before every search request after the first; the API answers 429 past an unpublished rate. */
 const INTER_PAGE_DELAY_MS = 250;
+/**
+ * Ceiling on a configured `himalayas.delay_ms`. A long sweep needs a slower
+ * pace than the default: ~150 requests at 250ms got HTTP 429 from about the
+ * 100th on (2026-10-31), while ~240 at 1200ms went through clean.
+ */
+const MAX_DELAY_MS = 10_000;
 
 /** @param {string} url */
 function assertHimalayasUrl(url) {
@@ -120,9 +129,14 @@ function nonNegativeInt(value) {
  * Page budget: `himalayas.max_pages`, else the entry-level `max_pages` other
  * providers use, else DEFAULT_MAX_PAGES; always capped at MAX_PAGES_CAP.
  *
+ * `country` is one country or a list of them; each is swept in turn.
+ * `delay_ms` slows the pause between requests (never below the 250ms default,
+ * capped at MAX_DELAY_MS).
+ *
  * @param {any} entry - The job_boards entry.
- * @returns {null | { queries: string[], country: string, maxPages: number }}
- *   `queries` holds '' for a country-only sweep (no `q` param).
+ * @returns {null | { queries: string[], countries: string[], maxPages: number, delayMs: number }}
+ *   `queries` holds '' for a country-only sweep (no `q` param); `countries`
+ *   holds '' when no country filter is set.
  */
 export function parseHimalayasConfig(entry) {
   const cfg = entry?.himalayas;
@@ -132,17 +146,9 @@ export function parseHimalayasConfig(entry) {
     throw new Error(`himalayas: entry "${name}" - himalayas: must be a mapping with queries / country / max_pages`);
   }
 
-  const rawQueries = typeof cfg.queries === 'string' ? [cfg.queries] : Array.isArray(cfg.queries) ? cfg.queries : [];
-  const seen = new Set();
-  const queries = [];
-  for (const q of rawQueries) {
-    const trimmed = cleanText(q);
-    if (!trimmed || seen.has(trimmed.toLowerCase())) continue;
-    seen.add(trimmed.toLowerCase());
-    queries.push(trimmed);
-  }
-  const country = cleanText(cfg.country);
-  if (!queries.length && !country) {
+  const queries = cleanList(cfg.queries);
+  const countries = cleanList(cfg.country);
+  if (!queries.length && !countries.length) {
     throw new Error(`himalayas: entry "${name}" has a himalayas: block with no queries and no country - set at least one, or remove the block to read the newest-jobs feed`);
   }
 
@@ -154,7 +160,31 @@ export function parseHimalayasConfig(entry) {
     }
   }
 
-  return { queries: queries.length ? queries : [''], country, maxPages };
+  // Never faster than the default pace: delay_ms only slows a long sweep down.
+  const delayMs = Number.isInteger(cfg.delay_ms) && cfg.delay_ms > INTER_PAGE_DELAY_MS
+    ? Math.min(cfg.delay_ms, MAX_DELAY_MS)
+    : INTER_PAGE_DELAY_MS;
+
+  return { queries: queries.length ? queries : [''], countries: countries.length ? countries : [''], maxPages, delayMs };
+}
+
+/**
+ * A string or a list of strings, trimmed, blanks and non-strings dropped,
+ * deduplicated case-insensitively (first spelling kept).
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function cleanList(value) {
+  const raw = typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+  for (const v of raw) {
+    const trimmed = cleanText(v);
+    if (!trimmed || seen.has(trimmed.toLowerCase())) continue;
+    seen.add(trimmed.toLowerCase());
+    out.push(trimmed);
+  }
+  return out;
 }
 
 /**
@@ -194,7 +224,10 @@ function readSearchPage(json, label) {
 }
 
 /**
- * Search mode: one paginated sweep per query, deduplicated by posting URL.
+ * Search mode: one paginated sweep per query (per country, when several are
+ * set), deduplicated by posting URL. Countries run one after another on the
+ * same pacing, never in parallel: separate entries per country run in
+ * parallel and tripped the API's rate limit (HTTP 429, 2026-10-31).
  *
  * Termination per query: an empty page always ends it; otherwise the
  * response's own totalCount (offset + rows reached it); a short page only when
@@ -206,19 +239,24 @@ function readSearchPage(json, label) {
  * warning. Only when no query's first page came back does fetch() throw, so a
  * dead endpoint surfaces as an error rather than an empty board.
  *
- * Health probe (ctx.maxPages set): the first query only, at most ctx.maxPages
- * pages, and a failed request propagates unwrapped so verify-portals can still
- * recognise its own ProbePageBudgetReached.
+ * Health probe (ctx.maxPages set): the first query of the first country only,
+ * at most ctx.maxPages pages, and a failed request propagates unwrapped so
+ * verify-portals can still recognise its own ProbePageBudgetReached.
  *
  * @param {any} entry
  * @param {any} ctx
- * @param {{ queries: string[], country: string, maxPages: number }} cfg
+ * @param {{ queries: string[], countries: string[], maxPages: number, delayMs: number }} cfg
  */
 async function fetchSearch(entry, ctx, cfg) {
   const probeCap = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0 ? ctx.maxPages : 0;
   const queries = probeCap ? cfg.queries.slice(0, 1) : cfg.queries;
+  const countries = probeCap ? cfg.countries.slice(0, 1) : cfg.countries;
   const pagesPerQuery = probeCap ? Math.min(cfg.maxPages, probeCap) : cfg.maxPages;
   const name = entry?.name || 'Himalayas';
+  const searches = [];
+  for (const country of countries) {
+    for (const query of queries) searches.push({ query, country });
+  }
 
   /** @type {Map<string, {title: string, url: string, company: string, location: string, postedAt?: number}>} */
   const byUrl = new Map();
@@ -226,11 +264,11 @@ async function fetchSearch(entry, ctx, cfg) {
   let answered = 0;
   let requests = 0;
 
-  for (const query of queries) {
-    const label = query ? `"${query}"` : '(country only)';
+  for (const { query, country } of searches) {
+    const label = (query ? `"${query}"` : '(country only)') + (countries.length > 1 ? ` [${country}]` : '');
     for (let page = 1; page <= pagesPerQuery; page++) {
-      if (requests++ > 0) await sleep(INTER_PAGE_DELAY_MS, ctx);
-      const url = assertHimalayasUrl(buildSearchUrl(query, cfg.country, page));
+      if (requests++ > 0) await sleep(cfg.delayMs, ctx);
+      const url = assertHimalayasUrl(buildSearchUrl(query, country, page));
 
       let json;
       try {
@@ -264,7 +302,7 @@ async function fetchSearch(entry, ctx, cfg) {
   }
 
   if (answered === 0 && failures.length) {
-    throw new Error(`himalayas: all ${queries.length} search ${queries.length === 1 ? 'query' : 'queries'} failed - ${failures[0]}`);
+    throw new Error(`himalayas: all ${searches.length} search ${searches.length === 1 ? 'query' : 'queries'} failed - ${failures[0]}`);
   }
   for (const f of failures) console.error(`⚠️  himalayas: ${name} query ${f} - skipped, other queries kept`);
 

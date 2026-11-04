@@ -220,7 +220,7 @@ try {
     queries: ['  engineering manager ', '', 42, 'Engineering Manager', 'software development manager'],
     country: ' CA ',
   }));
-  if (JSON.stringify(cfg) === JSON.stringify({ queries: ['engineering manager', 'software development manager'], country: 'CA', maxPages: 10 })) {
+  if (JSON.stringify(cfg) === JSON.stringify({ queries: ['engineering manager', 'software development manager'], countries: ['CA'], maxPages: 10, delayMs: 250 })) {
     pass('parseHimalayasConfig trims, drops blank/non-string, dedups queries case-insensitively; default max_pages 10');
   } else {
     fail(`parseHimalayasConfig returned ${JSON.stringify(cfg)}`);
@@ -232,10 +232,23 @@ try {
     fail('parseHimalayasConfig should accept queries: "<string>"');
   }
 
-  if (JSON.stringify(parseHimalayasConfig(entryWith({ country: 'CA' }))) === JSON.stringify({ queries: [''], country: 'CA', maxPages: 10 })) {
+  if (JSON.stringify(parseHimalayasConfig(entryWith({ country: 'CA' }))) === JSON.stringify({ queries: [''], countries: ['CA'], maxPages: 10, delayMs: 250 })) {
     pass('parseHimalayasConfig: country with no queries -> one country-only sweep');
   } else {
     fail(`country-only config = ${JSON.stringify(parseHimalayasConfig(entryWith({ country: 'CA' })))}`);
+  }
+
+  if (JSON.stringify(parseHimalayasConfig(entryWith({ queries: 'staff engineer' })).countries) === '[""]') {
+    pass('parseHimalayasConfig: no country -> one unfiltered sweep');
+  } else {
+    fail(`no-country config = ${JSON.stringify(parseHimalayasConfig(entryWith({ queries: 'staff engineer' })))}`);
+  }
+
+  const listCfg = parseHimalayasConfig(entryWith({ queries: 'engineering manager', country: [' GB ', '', 7, 'DE', 'gb', 'PL'] }));
+  if (JSON.stringify(listCfg.countries) === '["GB","DE","PL"]') {
+    pass('parseHimalayasConfig accepts a country list: trimmed, blanks/non-strings dropped, deduplicated case-insensitively');
+  } else {
+    fail(`country list parsed to ${JSON.stringify(listCfg)}`);
   }
 
   const pagesFor = (himalayasCfg, extra) => parseHimalayasConfig(entryWith(himalayasCfg, extra)).maxPages;
@@ -253,6 +266,19 @@ try {
   if (badPages.length === 0) pass('parseHimalayasConfig resolves max_pages (nested > entry-level > default 10, cap 50, junk ignored)');
   else fail(`max_pages cases wrong: ${badPages.map(([got, want, label]) => `${label}: got ${got}, want ${want}`).join('; ')}`);
 
+  const delayFor = (delay) => parseHimalayasConfig(entryWith({ country: 'CA', delay_ms: delay })).delayMs;
+  const delayCases = [
+    [delayFor(1200), 1200, 'delay_ms 1200'],
+    [delayFor(100), 250, 'below the default -> default (never faster)'],
+    [delayFor(60_000), 10_000, 'capped at 10s'],
+    [delayFor('1200'), 250, 'string -> default'],
+    [delayFor(1.5), 250, 'fractional -> default'],
+    [delayFor(undefined), 250, 'unset -> default'],
+  ];
+  const badDelays = delayCases.filter(([got, want]) => got !== want);
+  if (badDelays.length === 0) pass('parseHimalayasConfig resolves delay_ms (default 250 is the floor, cap 10s, junk ignored)');
+  else fail(`delay_ms cases wrong: ${badDelays.map(([got, want, label]) => `${label}: got ${got}, want ${want}`).join('; ')}`);
+
   const throwsFor = (himalayasCfg) => {
     try { parseHimalayasConfig(entryWith(himalayasCfg)); return null; } catch (e) { return e.message; }
   };
@@ -261,6 +287,12 @@ try {
     pass('parseHimalayasConfig throws (naming the entry) on a block with neither queries nor country');
   } else {
     fail(`empty search block should throw, got ${JSON.stringify(noSearch)}`);
+  }
+  const blankCountries = throwsFor({ country: ['', ' '] });
+  if (blankCountries && /no queries and no country/.test(blankCountries)) {
+    pass('parseHimalayasConfig: a country list of blanks with no queries still throws');
+  } else {
+    fail(`blank country list should throw, got ${JSON.stringify(blankCountries)}`);
   }
   if ([['engineering manager'], 'engineering manager', true].every(v => /must be a mapping/.test(throwsFor(v) || ''))) {
     pass('parseHimalayasConfig throws on a non-mapping himalayas: value');
@@ -394,7 +426,66 @@ try {
     else fail(`sleeps: ${JSON.stringify(sleeps)} for ${calls.length} requests`);
   }
 
+  // Several countries: every query swept per country, one after another, deduplicated, paced
+  {
+    const { ctx, calls, sleeps } = makeCtx((url) => {
+      const country = url.searchParams.get('country');
+      const page = Number(url.searchParams.get('page'));
+      const body = makePage({ page, total: 3, count: 3, tag: `${country}-${url.searchParams.get('q').split(' ')[0]}` });
+      // A posting open to both countries comes back from each sweep.
+      body.jobs[0] = makePage({ page: 1, total: 3, tag: 'shared' }).jobs[0];
+      return body;
+    });
+    const { jobs, warnings, error } = await run(entryWith({ queries: ['engineering manager', 'team lead'], country: ['GB', 'DE'] }), ctx);
+    const sequence = calls.map(c => `${c.url.searchParams.get('country')}:${c.url.searchParams.get('q')}`).join(',');
+    if (!error && sequence === 'GB:engineering manager,GB:team lead,DE:engineering manager,DE:team lead') {
+      pass('a country list sweeps every query per country, one country after another');
+    } else {
+      fail(`country/query sequence: ${sequence} (error ${error?.message})`);
+    }
+    if (jobs?.length === 9 && new Set(jobs.map(j => j.url)).size === 9) pass('a posting returned for two countries is kept once');
+    else fail(`multi-country dedup: ${jobs?.length} jobs`);
+    if (sleeps.length === calls.length - 1 && sleeps.every(ms => ms === 250) && warnings.length === 0) {
+      pass('the 250ms pause runs between countries too (one sequential stream)');
+    } else {
+      fail(`multi-country sleeps: ${JSON.stringify(sleeps)} for ${calls.length} requests, warnings ${JSON.stringify(warnings)}`);
+    }
+  }
+  {
+    const { ctx, calls, sleeps } = makeCtx((url) => makePage({ page: 1, total: 2, count: 2, tag: url.searchParams.get('country') }));
+    await run(entryWith({ queries: ['engineering manager'], country: ['GB', 'DE', 'PL'], delay_ms: 1200 }), ctx);
+    if (calls.length === 3 && sleeps.length === 2 && sleeps.every(ms => ms === 1200)) pass('delay_ms sets the pause between every request');
+    else fail(`delay_ms sleeps: ${JSON.stringify(sleeps)} for ${calls.length} requests`);
+  }
+  {
+    const { ctx } = makeCtx((url) => {
+      if (url.searchParams.get('country') === 'DE') throw httpError(429);
+      return makePage({ page: 1, total: 2, count: 2, tag: 'gb' });
+    });
+    const { jobs, warnings, error } = await run(entryWith({ queries: ['engineering manager'], country: ['GB', 'DE'] }), ctx);
+    if (!error && jobs.length === 2 && warnings.some(w => /"engineering manager" \[DE\]: HTTP 429 - skipped, other queries kept/.test(w))) {
+      pass('one country failing is skipped with a warning naming the country; the others are kept');
+    } else {
+      fail(`one-country outage: ${jobs?.length} jobs, warnings ${JSON.stringify(warnings)}, error ${error?.message}`);
+    }
+  }
+  {
+    const { ctx } = makeCtx(() => { throw httpError(429); });
+    const { error } = await run(entryWith({ queries: ['engineering manager', 'team lead'], country: ['GB', 'DE', 'PL'] }), ctx);
+    if (error && /all 6 search queries failed/.test(error.message)) pass('every country x query failing throws, counting each search');
+    else fail(`multi-country total outage: ${error ? error.message : 'no error'}`);
+  }
+
   // Health probe: ctx.maxPages
+  {
+    const { ctx, calls } = makeCtx((url) => makePage({ page: Number(url.searchParams.get('page')), total: 5000 }), { maxPages: 1 });
+    const { error } = await run(entryWith({ queries: ['engineering manager'], country: ['GB', 'DE'] }), ctx);
+    if (!error && calls.length === 1 && calls[0].url.searchParams.get('country') === 'GB') {
+      pass('ctx.maxPages with a country list -> one request, first country only');
+    } else {
+      fail(`multi-country probe: ${calls.length} requests (${calls.map(c => c.url.searchParams.get('country')).join(',')}), error ${error?.message}`);
+    }
+  }
   {
     const { ctx, calls } = makeCtx((url) => makePage({ page: Number(url.searchParams.get('page')), total: 5000 }), { maxPages: 1 });
     const { warnings, error } = await run(entryWith({ queries: ['engineering manager', 'software development manager'] }), ctx);
