@@ -1,5 +1,20 @@
 # Career-Ops -- AI Job Search Pipeline
 
+## This fork: restore before first-run setup
+
+This is a personal fork. The owner's CV, config, tracker and job-search automation live in a private companion repo, `PaulWarnick21/career-ops-config`, checked out over this one.
+
+- **`cv.md` missing here means a fresh clone, not a new user.** Don't run `doctor.mjs` or start onboarding, because `doctor.mjs` copies template files into place. Read the restore guide in the private repo first and walk the owner through it:
+
+  ```bash
+  git clone --bare https://github.com/PaulWarnick21/career-ops-config.git ../career-ops-config.git
+  git --git-dir=../career-ops-config.git show main:.github/README.md
+  ```
+
+  A folder under `.claude/worktrees/` lacks `cv.md` too. That's a worktree session, not a fresh clone, so don't restore there.
+
+- **`data/.auto-scan.pause` means automation was switched off on purpose.** Leave it off unless the owner asks. To turn it back on, run `powershell -ExecutionPolicy Bypass -File .\automation.ps1 resume` (`status` and `pause` work the same way). The private repo's guide covers this under "Pausing and resuming automation".
+
 ## Origin
 
 Built and used by [santifer](https://santifer.io) to evaluate 740+ offers, generate 100+ tailored CVs, and land a Head of Applied AI role. The archetypes, scoring, and negotiation scripts reflect that search; his portfolio is also open source: [cv-santiago](https://github.com/santifer/cv-santiago).
